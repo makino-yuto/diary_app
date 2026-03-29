@@ -13,11 +13,11 @@ import com.makino.diary_app.notifications.DiaryReminderScheduler
 import com.makino.diary_app.ui.DiaryApp
 
 class MainActivity : ComponentActivity() {
-    private var forceShowOnboarding by mutableStateOf(false)
+    private var forceShowOnboarding by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        forceShowOnboarding = shouldForceShowOnboarding(intent)
+        forceShowOnboarding = true
         DiaryReminderScheduler.scheduleReminders(this, DiaryRepository(this).loadReminderTimes())
         enableEdgeToEdge()
         setContent {
@@ -31,13 +31,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        forceShowOnboarding = shouldForceShowOnboarding(intent)
-    }
-
-    private fun shouldForceShowOnboarding(intent: Intent?): Boolean =
-        intent?.getBooleanExtra(EXTRA_FORCE_SHOW_ONBOARDING, false) == true
-
-    companion object {
-        const val EXTRA_FORCE_SHOW_ONBOARDING = "force_show_onboarding"
+        forceShowOnboarding = true
     }
 }

@@ -17,6 +17,6 @@ enum class AppThemePreset(
 
     companion object {
         fun fromStorageValue(value: String?): AppThemePreset =
-            entries.firstOrNull { it.storageValue == value } ?: EcruBeige
+            entries.firstOrNull { it.storageValue == value } ?: BlancDeZinc
     }
 }

@@ -22,7 +22,7 @@ data class DiaryUiState(
     val isLoading: Boolean = true,
     val entries: List<DiaryEntry> = emptyList(),
     val visibleMonth: YearMonth = YearMonth.now(),
-    val themePreset: AppThemePreset = AppThemePreset.EcruBeige,
+    val themePreset: AppThemePreset = AppThemePreset.BlancDeZinc,
     val reminderTimes: List<LocalTime> = emptyList(),
     val hasSeenReminderPrompt: Boolean = false,
     val hasCompletedOnboarding: Boolean = false

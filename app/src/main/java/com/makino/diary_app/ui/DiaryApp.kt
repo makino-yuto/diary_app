@@ -10,6 +10,13 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -46,7 +53,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -68,14 +80,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,22 +100,28 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -136,6 +157,8 @@ import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private const val ROUTE_SPLASH = "splash"
 private const val ROUTE_ONBOARDING = "onboarding"
@@ -184,17 +207,18 @@ private const val PROMPT_PLACEHOLDER = "\u4eca\u65e5\u306e\u3053\u3068\u3092\u30
 private const val PROMPT_EDIT_NOTE = "\u4f1a\u8a71\u3092\u4fdd\u5b58\u3057\u305f\u3042\u3068\u3082\u3001\u30ab\u30ec\u30f3\u30c0\u30fc\u304b\u3089\u3044\u3064\u3067\u3082\u66f8\u304d\u76f4\u305b\u307e\u3059\u3002"
 private const val PROMPT_CALENDAR_STYLE_NOTE = "\u66f8\u304d\u305f\u3044\u65e5\u3092\u9078\u3093\u3067\u3001\u305d\u306e\u307e\u307e\u7de8\u96c6\u3067\u304d\u307e\u3059\u3002"
 private const val PROMPT_EMPTY_DIARY = "\u3053\u306e\u65e5\u306e\u65e5\u8a18\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002"
-private const val PROMPT_DIARY_MENU_NOTE = "\u3053\u3053\u304b\u3089\u4fdd\u5b58\u6e08\u307f\u306e\u65e5\u8a18\u3092\u958b\u3051\u307e\u3059\u3002"
 private const val PROMPT_DIARY_MENU_EMPTY = "\u307e\u3060\u95b2\u89a7\u3067\u304d\u308b\u65e5\u8a18\u304c\u3042\u308a\u307e\u305b\u3093\u3002"
 private const val PROMPT_THEME_NOTE = "\u8868\u793a\u30c6\u30fc\u30de\u3092\u9078\u3079\u307e\u3059\u3002"
-private const val PROMPT_NOTIFICATION_TIME_NOTE = "\u305d\u306e\u65e5\u306e\u65e5\u8a18\u304c\u672a\u8a18\u5165\u306e\u3068\u304d\u3060\u3051\u3001\u8a2d\u5b9a\u3057\u305f\u6642\u9593\u306b\u901a\u77e5\u3057\u307e\u3059\u3002\n\u8907\u6570\u8ffd\u52a0\u3067\u304d\u307e\u3059\u3002"
+private const val PROMPT_NOTIFICATION_TIME_NOTE = "\u305d\u306e\u65e5\u306e\u65e5\u8a18\u304c\u672a\u8a18\u5165\u306e\u3068\u304d\u3060\u3051\u3001\u8a2d\u5b9a\u3057\u305f\u6642\u9593\u306b\u901a\u77e5\u3057\u307e\u3059\n\u8907\u6570\u8ffd\u52a0\u3067\u304d\u307e\u3059"
 private const val PROMPT_THEME_SETTINGS_NOTE = "\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059"
 private const val PROMPT_NOTIFICATION_SETTINGS_NOTE = "\u901a\u77e5\u6642\u523b\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059"
-private const val PROMPT_ONBOARDING_REMINDER = "\u306f\u3058\u3081\u306b\u3001\u6bce\u65e5\u3069\u306e\u6642\u9593\u306b\u65e5\u8a18\u3092\u66f8\u304f\u304b\u6c7a\u3081\u307e\u3057\u3087\u3046\u3002\u8907\u6570\u8ffd\u52a0\u3067\u304d\u307e\u3059\u3002"
-private const val PROMPT_ONBOARDING_THEME = "\u6b21\u306b\u3001\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u9078\u3073\u307e\u3057\u3087\u3046\u3002\u30bf\u30c3\u30d7\u3059\u308b\u3068\u305d\u306e\u5834\u3067\u53cd\u6620\u3055\u308c\u307e\u3059\u3002"
-private const val PROMPT_ONBOARDING_FINISH = "\u8a2d\u5b9a\u3067\u304d\u305f\u3089\u3001\u4e0b\u306e\u300c\u306f\u3058\u3081\u308b\u300d\u304b\u3089\u9032\u307f\u307e\u3057\u3087\u3046\u3002"
+private const val PROMPT_ONBOARDING_REMINDER = "\u306f\u3058\u3081\u306b\u3001\u6bce\u65e5\u3069\u306e\u6642\u9593\u306b\u65e5\u8a18\u3092\u66f8\u304f\u304b\u6c7a\u3081\u307e\u3057\u3087\u3046"
+private const val PROMPT_ONBOARDING_THEME = "\u6b21\u306b\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u9078\u3073\u307e\u3057\u3087\u3046"
+private const val PROMPT_ONBOARDING_FINISH = "\u8a2d\u5b9a\u3067\u304d\u305f\u3089\u3001\u4e0b\u306e\u300c\u306f\u3058\u3081\u308b\u300d\u304b\u3089\u9032\u307f\u307e\u3057\u3087\u3046"
 private val CHAT_TEXT_SIZE = 18.sp
 private val CHAT_LINE_HEIGHT = 28.sp
+private const val ONBOARDING_MESSAGE_DELAY_MS = 1500L
+private const val ONBOARDING_THEME_TRANSITION_DELAY_MS = 1500L
 
 private enum class BottomSection {
     DiaryMenu,
@@ -593,6 +617,7 @@ private fun DiaryNavigation(
     ) {
         if (uiState.isLoading) return@LaunchedEffect
         if (forceShowOnboarding) {
+            launchRouteResolved = true
             navController.navigate(ROUTE_ONBOARDING) {
                 launchSingleTop = true
             }
@@ -763,14 +788,65 @@ private fun OnboardingChatScreen(
     onFinish: () -> Unit
 ) {
     val today = LocalDate.now()
+    val listState = rememberLazyListState()
     var hasSkippedReminderSelection by rememberSaveable { mutableStateOf(false) }
     val hasAdvancedToThemeStep = reminderTimes.isNotEmpty() || hasSkippedReminderSelection
+    var showReminderIntro by rememberSaveable { mutableStateOf(false) }
+    var showReminderNote by rememberSaveable { mutableStateOf(false) }
+    var showThemeIntro by rememberSaveable { mutableStateOf(false) }
+    var showThemeNote by rememberSaveable { mutableStateOf(false) }
+    var showFinishPrompt by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!showReminderIntro) {
+            kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+            showReminderIntro = true
+        }
+        if (!showReminderNote) {
+            kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+            showReminderNote = true
+        }
+    }
+
+    LaunchedEffect(hasAdvancedToThemeStep, showReminderNote) {
+        if (!hasAdvancedToThemeStep || !showReminderNote || showThemeIntro) return@LaunchedEffect
+        kotlinx.coroutines.delay(ONBOARDING_THEME_TRANSITION_DELAY_MS)
+        showThemeIntro = true
+        kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+        showThemeNote = true
+        kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+        showFinishPrompt = true
+    }
+
+    val visibleOnboardingItemCount by remember(
+        showReminderIntro,
+        showReminderNote,
+        showThemeIntro,
+        showThemeNote,
+        showFinishPrompt
+    ) {
+        derivedStateOf {
+            var count = 0
+            if (showReminderIntro) count += 1
+            if (showReminderNote) count += 2
+            if (showThemeIntro) count += 1
+            if (showThemeNote) count += 1
+            if (showFinishPrompt) count += 1
+            count
+        }
+    }
+
+    LaunchedEffect(visibleOnboardingItemCount) {
+        if (visibleOnboardingItemCount > 0) {
+            listState.animateScrollToItem(visibleOnboardingItemCount - 1)
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
-            if (hasAdvancedToThemeStep) {
+            if (showFinishPrompt) {
                 Surface(
                     tonalElevation = 2.dp,
                     color = MaterialTheme.colorScheme.surface
@@ -781,11 +857,13 @@ private fun OnboardingChatScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        Button(
-                            onClick = onFinish,
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Text(LABEL_START)
+                        AnimatedChatContent(animationKey = "onboarding_start_button") {
+                            Button(
+                                onClick = onFinish,
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Text(LABEL_START)
+                            }
                         }
                     }
                 }
@@ -806,55 +884,64 @@ private fun OnboardingChatScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
-                item {
-                    MessageBubble(
-                        text = PROMPT_ONBOARDING_REMINDER,
-                        isBot = true
-                    )
-                }
-                item {
-                    OnboardingReminderCard(
-                        reminderTimes = reminderTimes,
-                        onPickTime = onAddReminderTime,
-                        onRemoveReminderTime = onRemoveReminderTime,
-                        onSkip = { hasSkippedReminderSelection = true }
-                    )
-                }
-                if (reminderTimes.isNotEmpty()) {
-                    item {
+                if (showReminderIntro) {
+                    item(key = "onboarding_reminder_intro") {
                         MessageBubble(
-                            text = reminderTimes.joinToString(" / ") { formatReminderTime(it) },
-                            isBot = false
+                            text = PROMPT_ONBOARDING_REMINDER,
+                            isBot = true,
+                            animationKey = "onboarding_reminder_intro"
                         )
                     }
                 }
-                if (hasAdvancedToThemeStep) {
-                    item {
+                if (showReminderNote) {
+                    item(key = "onboarding_reminder_note") {
+                        MessageBubble(
+                            text = PROMPT_NOTIFICATION_TIME_NOTE,
+                            isBot = true,
+                            animationKey = "onboarding_reminder_note"
+                        )
+                    }
+                    item(key = "onboarding_reminder_card") {
+                        AnimatedChatContent(animationKey = "onboarding_reminder_card") {
+                            OnboardingReminderCard(
+                                reminderTimes = reminderTimes,
+                                onPickTime = onAddReminderTime,
+                                onRemoveReminderTime = onRemoveReminderTime,
+                                onSkip = { hasSkippedReminderSelection = true }
+                            )
+                        }
+                    }
+                }
+                if (showThemeIntro) {
+                    item(key = "onboarding_theme_intro") {
                         MessageBubble(
                             text = PROMPT_ONBOARDING_THEME,
-                            isBot = true
+                            isBot = true,
+                            animationKey = "onboarding_theme_intro"
                         )
                     }
-                    item {
-                        MessageBubble(
-                            text = themePreset.label,
-                            isBot = false
-                        )
+                }
+                if (showThemeNote) {
+                    item(key = "onboarding_theme_card") {
+                        AnimatedChatContent(animationKey = "onboarding_theme_card") {
+                            ThemeSelectionInlineCard(
+                                selectedThemePreset = themePreset,
+                                onSelectThemePreset = onSelectThemePreset
+                            )
+                        }
                     }
-                    item {
-                        ThemeSelectionInlineCard(
-                            selectedThemePreset = themePreset,
-                            onSelectThemePreset = onSelectThemePreset
-                        )
-                    }
-                    item {
+                }
+                if (showFinishPrompt) {
+                    item(key = "onboarding_finish_prompt") {
                         MessageBubble(
                             text = PROMPT_ONBOARDING_FINISH,
-                            isBot = true
+                            isBot = true,
+                            animationKey = "onboarding_finish_prompt"
                         )
                     }
                 }
@@ -1103,36 +1190,78 @@ private fun PhotoActionBar(
 }
 
 @Composable
-private fun MessageBubble(text: String, isBot: Boolean) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isBot) Arrangement.Start else Arrangement.End
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = if (isBot) {
-                    MaterialTheme.colorScheme.surface
-                } else {
-                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
-                }
-            ),
-            shape = RoundedCornerShape(
-                topStart = 22.dp,
-                topEnd = 22.dp,
-                bottomStart = if (isBot) 6.dp else 22.dp,
-                bottomEnd = if (isBot) 22.dp else 6.dp
-            ),
-            modifier = Modifier.fillMaxWidth(0.8f)
+private fun MessageBubble(
+    text: String,
+    isBot: Boolean,
+    animationKey: String = "${if (isBot) "bot" else "user"}:$text"
+) {
+    AnimatedChatContent(animationKey = animationKey) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (isBot) Arrangement.Start else Arrangement.End
         ) {
-            Text(
-                text = text,
-                modifier = Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = CHAT_TEXT_SIZE,
-                    lineHeight = CHAT_LINE_HEIGHT
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isBot) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                    }
+                ),
+                shape = RoundedCornerShape(
+                    topStart = 22.dp,
+                    topEnd = 22.dp,
+                    bottomStart = if (isBot) 6.dp else 22.dp,
+                    bottomEnd = if (isBot) 22.dp else 6.dp
+                ),
+                modifier = Modifier.fillMaxWidth(0.8f)
+            ) {
+                Text(
+                    text = text,
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = CHAT_TEXT_SIZE,
+                        lineHeight = CHAT_LINE_HEIGHT
+                    )
                 )
-            )
+            }
         }
+    }
+}
+
+@Composable
+private fun AnimatedChatContent(
+    animationKey: String,
+    content: @Composable () -> Unit
+) {
+    var hasAnimated by rememberSaveable(animationKey) { mutableStateOf(false) }
+    if (hasAnimated) {
+        content()
+        return
+    }
+
+    val visibleState = remember(animationKey) {
+        MutableTransitionState(false).apply {
+            targetState = true
+        }
+    }
+
+    LaunchedEffect(animationKey, visibleState.isIdle, visibleState.currentState) {
+        if (visibleState.isIdle && visibleState.currentState) {
+            hasAnimated = true
+        }
+    }
+
+    AnimatedVisibility(
+        visibleState = visibleState,
+        enter = fadeIn(
+            animationSpec = tween(durationMillis = 360)
+        ) + slideInVertically(
+            animationSpec = tween(durationMillis = 360),
+            initialOffsetY = { fullHeight -> fullHeight / 4 }
+        )
+    ) {
+        content()
     }
 }
 
@@ -1375,6 +1504,7 @@ private fun CalendarMonthPickerDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DiaryMenuScreen(
     uiState: DiaryUiState,
@@ -1384,8 +1514,11 @@ private fun DiaryMenuScreen(
     onOpenSettings: () -> Unit
 ) {
     val completedEntries = remember(uiState.entries) {
-        uiState.entries.filter { it.isCompleted }
+        uiState.entries.filter { it.isCompleted }.sortedByDescending(DiaryEntry::date)
     }
+    val monthSections = remember(completedEntries) { buildDiaryMonthSections(completedEntries) }
+    val diaryMenuListItems = remember(monthSections) { buildDiaryMenuListItems(monthSections) }
+    val listState = rememberLazyListState()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -1411,14 +1544,7 @@ private fun DiaryMenuScreen(
                     fontFamily = JetBrainsMsGothicFontFamily
                 )
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = PROMPT_DIARY_MENU_NOTE,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             if (completedEntries.isEmpty()) {
                 Card(
@@ -1432,57 +1558,390 @@ private fun DiaryMenuScreen(
                     )
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 ) {
-                    items(completedEntries.size) { index ->
-                        val entry = completedEntries[index]
-                        val previewPhoto = entry.photoUris.firstOrNull()
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenEntry(entry.date) },
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(18.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 12.dp)
+                    ) {
+                        monthSections.forEach { section ->
+                            stickyHeader(key = "diary-month-${section.month}") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.background)
+                                        .padding(bottom = 10.dp)
                                 ) {
-                                    Text(
-                                        text = entry.date.format(DateTimeFormatter.ofPattern("yy/MM/dd", Locale.JAPAN)),
-                                        style = MaterialTheme.typography.titleLarge.copy(
-                                            fontFamily = JetBrainsMsGothicFontFamily
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = entry.userText.ifBlank { PROMPT_EMPTY_DIARY },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                if (previewPhoto != null) {
-                                    AsyncImage(
-                                        model = previewPhoto,
-                                        contentDescription = "\u65e5\u8a18\u30d7\u30ec\u30d3\u30e5\u30fc",
-                                        modifier = Modifier
-                                            .size(width = 88.dp, height = 88.dp)
-                                            .clip(RoundedCornerShape(16.dp)),
-                                        contentScale = ContentScale.Crop
+                                    DiaryMenuMonthHeader(
+                                        month = section.month,
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
                             }
+                            items(
+                                count = section.entries.size,
+                                key = { index -> section.entries[index].date.toString() }
+                            ) { index ->
+                                DiaryMenuEntryCard(
+                                    entry = section.entries[index],
+                                    onClick = { onOpenEntry(section.entries[index].date) }
+                                )
+                            }
                         }
                     }
+
+                    if (completedEntries.size > 50) {
+                        DiaryMenuJumpRail(
+                            listItems = diaryMenuListItems,
+                            listState = listState,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                        )
+                    }
                 }
+            }
+        }
+    }
+}
+
+private data class DiaryMonthSection(
+    val month: YearMonth,
+    val entries: List<DiaryEntry>,
+    val listIndex: Int
+)
+
+private data class DiaryMenuListItemMeta(
+    val isMonthHeader: Boolean,
+    val hasPreviewPhoto: Boolean
+)
+
+private fun buildDiaryMonthSections(entries: List<DiaryEntry>): List<DiaryMonthSection> =
+    entries
+        .groupBy { YearMonth.from(it.date) }
+        .toList()
+        .sortedByDescending { it.first }
+        .runningFold(0 to emptyList<DiaryMonthSection>()) { (listIndex, sections), (month, groupedEntries) ->
+            val nextSection = DiaryMonthSection(
+                month = month,
+                entries = groupedEntries.sortedByDescending(DiaryEntry::date),
+                listIndex = listIndex
+            )
+            (listIndex + 1 + groupedEntries.size) to (sections + nextSection)
+        }
+        .last()
+        .second
+
+private fun buildDiaryMenuListItems(monthSections: List<DiaryMonthSection>): List<DiaryMenuListItemMeta> =
+    buildList {
+        monthSections.forEach { section ->
+            add(DiaryMenuListItemMeta(isMonthHeader = true, hasPreviewPhoto = false))
+            section.entries.forEach { entry ->
+                add(
+                    DiaryMenuListItemMeta(
+                        isMonthHeader = false,
+                        hasPreviewPhoto = entry.photoUris.isNotEmpty()
+                    )
+                )
+            }
+        }
+    }
+
+@Composable
+private fun DiaryMenuMonthHeader(
+    month: YearMonth,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 2.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+        )
+    ) {
+        Text(
+            text = month.format(DateTimeFormatter.ofPattern("yyyy\u5e74MM\u6708", Locale.JAPAN)),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontFamily = JetBrainsMsGothicFontFamily
+            ),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun DiaryMenuEntryCard(
+    entry: DiaryEntry,
+    onClick: () -> Unit
+) {
+    val previewPhoto = entry.photoUris.firstOrNull()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = entry.date.format(DateTimeFormatter.ofPattern("dd\u65e5", Locale.JAPAN)),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = JetBrainsMsGothicFontFamily
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = entry.userText.ifBlank { PROMPT_EMPTY_DIARY },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (previewPhoto != null) {
+                AsyncImage(
+                    model = previewPhoto,
+                    contentDescription = "\u65e5\u8a18\u30d7\u30ec\u30d3\u30e5\u30fc",
+                    modifier = Modifier
+                        .size(width = 88.dp, height = 88.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiaryMenuJumpRail(
+    listItems: List<DiaryMenuListItemMeta>,
+    listState: LazyListState,
+    modifier: Modifier = Modifier
+) {
+    if (listItems.size <= 1) return
+
+    val colorScheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    var isRailInteracting by remember { mutableStateOf(false) }
+    val indicatorAlpha = remember { Animatable(0f) }
+    val observedItemHeights = remember { mutableStateMapOf<Int, Int>() }
+    val visibleItemsInfo = listState.layoutInfo.visibleItemsInfo
+    SideEffect {
+        visibleItemsInfo.forEach { itemInfo ->
+            if (observedItemHeights[itemInfo.index] != itemInfo.size) {
+                observedItemHeights[itemInfo.index] = itemInfo.size
+            }
+        }
+    }
+    val itemSpacingPx = with(density) { 12.dp.roundToPx() }
+    val contentBottomPaddingPx = with(density) { 12.dp.roundToPx() }
+    val defaultHeaderHeightPx = with(density) { 56.dp.roundToPx() }
+    val defaultPhotoEntryHeightPx = with(density) { 124.dp.roundToPx() }
+    val defaultTextOnlyEntryHeightPx = with(density) { 108.dp.roundToPx() }
+    val estimatedItemHeights by remember(listItems, observedItemHeights) {
+        derivedStateOf {
+            val observedHeaderHeight = observedItemHeights
+                .filterKeys { index -> listItems.getOrNull(index)?.isMonthHeader == true }
+                .values
+                .average()
+                .takeIf { !it.isNaN() }
+                ?.roundToInt()
+            val observedPhotoEntryHeight = observedItemHeights
+                .filterKeys { index ->
+                    listItems.getOrNull(index)?.let { !it.isMonthHeader && it.hasPreviewPhoto } == true
+                }
+                .values
+                .average()
+                .takeIf { !it.isNaN() }
+                ?.roundToInt()
+            val observedTextOnlyEntryHeight = observedItemHeights
+                .filterKeys { index ->
+                    listItems.getOrNull(index)?.let { !it.isMonthHeader && !it.hasPreviewPhoto } == true
+                }
+                .values
+                .average()
+                .takeIf { !it.isNaN() }
+                ?.roundToInt()
+
+            listItems.mapIndexed { index, item ->
+                observedItemHeights[index] ?: when {
+                    item.isMonthHeader -> observedHeaderHeight ?: defaultHeaderHeightPx
+                    item.hasPreviewPhoto -> observedPhotoEntryHeight ?: defaultPhotoEntryHeightPx
+                    else -> observedTextOnlyEntryHeight ?: defaultTextOnlyEntryHeightPx
+                }
+            }
+        }
+    }
+    val cumulativeOffsetsPx by remember(estimatedItemHeights, itemSpacingPx) {
+        derivedStateOf {
+            buildList {
+                var accumulated = 0
+                estimatedItemHeights.forEachIndexed { index, itemHeight ->
+                    add(accumulated)
+                    accumulated += itemHeight
+                    if (index < estimatedItemHeights.lastIndex) {
+                        accumulated += itemSpacingPx
+                    }
+                }
+            }
+        }
+    }
+    val maxScrollPx by remember(listState, estimatedItemHeights, itemSpacingPx, contentBottomPaddingPx) {
+        derivedStateOf {
+            val viewportHeight =
+                (listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset)
+                    .coerceAtLeast(1)
+            val totalContentHeight =
+                (estimatedItemHeights.sum() +
+                    itemSpacingPx * (estimatedItemHeights.size - 1).coerceAtLeast(0) +
+                    contentBottomPaddingPx).coerceAtLeast(viewportHeight)
+            (totalContentHeight - viewportHeight).coerceAtLeast(1)
+        }
+    }
+    val rawScrollProgress by remember(listState, visibleItemsInfo, cumulativeOffsetsPx, maxScrollPx) {
+        derivedStateOf {
+            if (listItems.size <= 1) {
+                return@derivedStateOf 0f
+            }
+            if (!listState.canScrollBackward) {
+                return@derivedStateOf 0f
+            }
+            if (!listState.canScrollForward) {
+                return@derivedStateOf 1f
+            }
+
+            val viewportStart = listState.layoutInfo.viewportStartOffset
+            val anchorItem = visibleItemsInfo
+                .sortedBy { it.index }
+                .firstOrNull { itemInfo ->
+                    listItems.getOrNull(itemInfo.index)?.isMonthHeader == false
+                }
+                ?: visibleItemsInfo.firstOrNull()
+            val currentScroll = anchorItem
+                ?.let { itemInfo ->
+                    cumulativeOffsetsPx.getOrNull(itemInfo.index)?.let { itemTop ->
+                        itemTop - (itemInfo.offset - viewportStart)
+                    }
+                }
+                ?.coerceIn(0, maxScrollPx)
+                ?: 0
+
+            (currentScroll.toFloat() / maxScrollPx.toFloat()).coerceIn(0f, 1f)
+        }
+    }
+
+    LaunchedEffect(listState.isScrollInProgress, isRailInteracting) {
+        if (listState.isScrollInProgress || isRailInteracting) {
+            indicatorAlpha.stop()
+            indicatorAlpha.snapTo(1f)
+        } else if (indicatorAlpha.value > 0f) {
+            kotlinx.coroutines.delay(1500)
+            indicatorAlpha.stop()
+            indicatorAlpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 1000)
+            )
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .width(96.dp)
+    ) {
+        val thumbSize = 54.dp
+        val thumbSizePx = with(density) { thumbSize.toPx() }
+        val availableDragHeightPx = (with(density) { maxHeight.toPx() } - thumbSizePx).coerceAtLeast(1f)
+        var dragThumbTopPx by remember { mutableStateOf(availableDragHeightPx * rawScrollProgress) }
+        val displayedThumbTopPx = if (isRailInteracting) dragThumbTopPx else availableDragHeightPx * rawScrollProgress
+
+        LaunchedEffect(rawScrollProgress, isRailInteracting, availableDragHeightPx) {
+            if (!isRailInteracting) {
+                dragThumbTopPx = availableDragHeightPx * rawScrollProgress
+            }
+        }
+
+        if (indicatorAlpha.value > 0.01f) {
+            Canvas(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 10.dp)
+                    .offset {
+                        IntOffset(
+                            x = 0,
+                            y = displayedThumbTopPx.roundToInt()
+                        )
+                    }
+                    .size(thumbSize)
+                    .graphicsLayer { alpha = indicatorAlpha.value }
+                    .draggable(
+                        orientation = Orientation.Vertical,
+                        state = rememberDraggableState { dragAmount ->
+                            val contentDeltaPx =
+                                (dragAmount / availableDragHeightPx) * maxScrollPx.toFloat()
+                            val consumedContentPx = listState.dispatchRawDelta(contentDeltaPx)
+                            val consumedThumbDeltaPx =
+                                (consumedContentPx / maxScrollPx.toFloat()) * availableDragHeightPx
+                            dragThumbTopPx =
+                                (dragThumbTopPx + consumedThumbDeltaPx).coerceIn(0f, availableDragHeightPx)
+                        },
+                        onDragStarted = {
+                            isRailInteracting = true
+                            dragThumbTopPx = availableDragHeightPx * rawScrollProgress
+                        },
+                        onDragStopped = {
+                            isRailInteracting = false
+                        }
+                    )
+            ) {
+                val radius = size.minDimension / 2f
+                val arrowHalfWidth = radius * 0.35f
+                val arrowHeight = radius * 0.38f
+                val arrowGap = radius * 0.18f
+                val thumbCenterX = size.width / 2f
+                val thumbCenterY = size.height / 2f
+                val indicatorColor = colorScheme.primary.copy(alpha = indicatorAlpha.value)
+                val arrowColor = colorScheme.onPrimary.copy(alpha = indicatorAlpha.value)
+                drawCircle(
+                    color = indicatorColor,
+                    radius = radius,
+                    center = Offset(thumbCenterX, thumbCenterY)
+                )
+                drawPath(
+                    path = Path().apply {
+                        moveTo(thumbCenterX, thumbCenterY - arrowGap - arrowHeight)
+                        lineTo(thumbCenterX - arrowHalfWidth, thumbCenterY - arrowGap)
+                        lineTo(thumbCenterX + arrowHalfWidth, thumbCenterY - arrowGap)
+                        close()
+                    },
+                    color = arrowColor
+                )
+                drawPath(
+                    path = Path().apply {
+                        moveTo(thumbCenterX, thumbCenterY + arrowGap + arrowHeight)
+                        lineTo(thumbCenterX - arrowHalfWidth, thumbCenterY + arrowGap)
+                        lineTo(thumbCenterX + arrowHalfWidth, thumbCenterY + arrowGap)
+                        close()
+                    },
+                    color = arrowColor
+                )
             }
         }
     }
@@ -1565,11 +2024,6 @@ private fun OnboardingReminderCard(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = PROMPT_NOTIFICATION_TIME_NOTE,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colorScheme.onSurface.copy(alpha = 0.78f)
-            )
             if (reminderTimes.isNotEmpty()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1739,11 +2193,10 @@ private fun ThemeSelectionInlineCard(
             color = colorScheme.onSurface.copy(alpha = 0.12f)
         )
     ) {
-        FlowRow(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             inlineThemeOrder.forEach { theme ->
@@ -1768,13 +2221,8 @@ private fun ThemeInlineChip(
 
     Row(
         modifier = Modifier
-            .then(
-                if (themePreset == AppThemePreset.HorizonBlue || themePreset == AppThemePreset.Lilac) {
-                    Modifier.fillMaxWidth()
-                } else {
-                    Modifier
-                }
-            )
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(
                 if (isSelected) colorScheme.primary.copy(alpha = 0.12f)
@@ -1793,10 +2241,14 @@ private fun ThemeInlineChip(
         ThemePreviewRow(previewColors = previewColors)
         Text(
             text = themePreset.label,
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.labelMedium.copy(
                 fontFamily = JetBrainsMsGothicFontFamily
             ),
-            color = if (isSelected) colorScheme.primary else colorScheme.onSurface
+            color = if (isSelected) colorScheme.primary else colorScheme.onSurface,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
