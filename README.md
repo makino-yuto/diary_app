@@ -2,7 +2,8 @@
 
 写真、動画を記録できる日記アプリです。
 
-Google ログインなしでも使えます。必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。
+Google ログインなしでも使えます。<br>
+必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。
 
 ## リリース
 - [最新 APK v1.0.0](https://github.com/makino-yuto/diary_app/releases/download/v1.0.0-debug/mainichi-diary-v1.0.0-debug.apk)
