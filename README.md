@@ -1,7 +1,6 @@
 # まいにち日記
-Android / Kotlin / Jetpack Compose
 
-毎日の出来事を日記として残せる Android アプリです。
+写真、動画を記録できる日記アプリです。
 
 Google ログインなしでも使えます。必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。
 
@@ -52,8 +51,6 @@ Google ログインなしでも使えます。必要な場合だけ Google Drive
 ./gradlew installDebug
 ./gradlew test
 ```
-
-Windows の場合
 
 ```powershell
 .\gradlew.bat assembleDebug
