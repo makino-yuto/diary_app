@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Diary Chat</string>
+    <string name="app_name">まいにち日記</string>
+    <string name="launcher_name">日記</string>
 </resources>

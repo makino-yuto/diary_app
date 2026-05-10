@@ -241,6 +241,8 @@ private const val LABEL_RESTORE_DATA = "\u30c7\u30fc\u30bf\u306e\u5fa9\u5143"
 private const val LABEL_GOOGLE_ACCOUNT = "Google\u30a2\u30ab\u30a6\u30f3\u30c8"
 private const val LABEL_SYNC_METHOD = "\u540c\u671f\u65b9\u6cd5"
 private const val LABEL_SYNC_NOW = "\u4eca\u3059\u3050\u540c\u671f"
+private const val LABEL_SYNC_MODE_AUTO = "\u81ea\u52d5"
+private const val LABEL_SYNC_MODE_MANUAL = "\u624b\u52d5"
 private const val LABEL_LOGIN_WITH_GOOGLE = "Google\u3067\u30ed\u30b0\u30a4\u30f3"
 private const val LABEL_LOGOUT = "\u30ed\u30b0\u30a2\u30a6\u30c8"
 private const val LABEL_SET_PASSWORD = "\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u8a2d\u5b9a"
@@ -319,6 +321,8 @@ private const val PROMPT_GOOGLE_DRIVE_MANUAL_SYNCED = "Google Drive と同期し
 private const val PROMPT_ONBOARDING_REMINDER = "\u306f\u3058\u3081\u306b\u3001\u6bce\u65e5\u3069\u306e\u6642\u9593\u306b\u65e5\u8a18\u3092\u66f8\u304f\u304b\u6c7a\u3081\u307e\u3057\u3087\u3046"
 private const val PROMPT_ONBOARDING_GOOGLE_DRIVE = "Google Drive\u306b\u30ed\u30b0\u30a4\u30f3\u3059\u308b\u3068\u3001\u8907\u6570\u306e\u7aef\u672b\u9593\u3067\u30c7\u30fc\u30bf\u3092\u5171\u6709\u3067\u304d\u3001\u6a5f\u7a2e\u5909\u66f4\u6642\u3082\u30c7\u30fc\u30bf\u3092\u5f15\u304d\u7d99\u3052\u307e\u3059"
 private const val PROMPT_ONBOARDING_GOOGLE_DRIVE_PERMISSION = "Google Drive \u306e \u30de\u30a4\u30c9\u30e9\u30a4\u30d6/\u307e\u3044\u306b\u3061\u65e5\u8a18 \u306b\u4fdd\u5b58\u3057\u307e\u3059\n\u3053\u306e\u30a2\u30d7\u30ea\u306f\u8a31\u53ef\u3055\u308c\u305f\u3053\u306e\u30d5\u30a9\u30eb\u30c0\u3068\u30a2\u30d7\u30ea\u304c\u4f5c\u6210\u3057\u305f\u30c7\u30fc\u30bf\u4ee5\u5916\u306b\u306f\u30a2\u30af\u30bb\u30b9\u3057\u307e\u305b\u3093"
+private const val PROMPT_ONBOARDING_SYNC_MODE = "Google Drive \u3068\u306e\u540c\u671f\u65b9\u6cd5\u3092\u9078\u3073\u307e\u3057\u3087\u3046"
+private const val PROMPT_ONBOARDING_SYNC_MODE_NOTE = "\u81ea\u52d5\u3092\u9078\u3076\u3068\u3001\u30c1\u30e3\u30c3\u30c8\u3092\u5b8c\u4e86\u3057\u305f\u3068\u304d\u3084\u65e5\u8a18\u753b\u9762\u3067\u4fdd\u5b58\u3092\u62bc\u3057\u305f\u3068\u304d\u306b Google Drive \u3078\u540c\u671f\u3055\u308c\u307e\u3059\n\u624b\u52d5\u3092\u9078\u3076\u3068\u3001\u8a2d\u5b9a\u304b\u3089\u597d\u304d\u306a\u30bf\u30a4\u30df\u30f3\u30b0\u3067\u540c\u671f\u3067\u304d\u307e\u3059"
 private const val PROMPT_ONBOARDING_THEME = "\u6b21\u306b\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u9078\u3073\u307e\u3057\u3087\u3046"
 private const val PROMPT_ONBOARDING_FINISH = "\u8a2d\u5b9a\u3067\u304d\u305f\u3089\u3001\u4e0b\u306e\u300c\u306f\u3058\u3081\u308b\u300d\u304b\u3089\u9032\u307f\u307e\u3057\u3087\u3046"
 private val CHAT_TEXT_SIZE = 18.sp
@@ -942,11 +946,11 @@ fun DiaryApp(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(top = 12.dp, end = 16.dp)
+                .padding(top = 12.dp)
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.TopEnd
+                contentAlignment = Alignment.TopCenter
             ) {
                 Surface(
                     shape = ControlShape,
@@ -1315,12 +1319,14 @@ private fun DiaryNavigation(
             OnboardingChatScreen(
                 reminderTimes = uiState.reminderTimes,
                 backupAccountEmail = uiState.backupAccountEmail,
+                googleDriveSyncMode = uiState.googleDriveSyncMode,
                 themePreset = uiState.themePreset,
                 themeIntensity = uiState.themeIntensity,
                 isInteractionLocked = isDriveSyncInFlight,
                 onAddReminderTime = onOpenReminderTimePicker,
                 onRemoveReminderTime = onRemoveReminderTime,
                 onConnectGoogleDrive = onConnectGoogleDrive,
+                onSetGoogleDriveSyncMode = onSetGoogleDriveSyncMode,
                 onSelectThemePreset = onSetThemePreset,
                 onThemeIntensityChange = onSetThemeIntensity,
                 onFinish = finishOnboarding
@@ -1461,12 +1467,14 @@ private fun DiaryNavigation(
 private fun OnboardingChatScreen(
     reminderTimes: List<LocalTime>,
     backupAccountEmail: String?,
+    googleDriveSyncMode: GoogleDriveSyncMode,
     themePreset: AppThemePreset,
     themeIntensity: Float,
     isInteractionLocked: Boolean,
     onAddReminderTime: () -> Unit,
     onRemoveReminderTime: (LocalTime) -> Unit,
     onConnectGoogleDrive: () -> Unit,
+    onSetGoogleDriveSyncMode: (GoogleDriveSyncMode) -> Unit,
     onSelectThemePreset: (AppThemePreset) -> Unit,
     onThemeIntensityChange: (Float) -> Unit,
     onFinish: () -> Unit
@@ -1475,12 +1483,16 @@ private fun OnboardingChatScreen(
     val listState = rememberLazyListState()
     var hasSkippedReminderSelection by rememberSaveable { mutableStateOf(false) }
     var hasChosenGoogleDriveOption by rememberSaveable { mutableStateOf(false) }
+    var hasChosenSyncModeOption by rememberSaveable { mutableStateOf(false) }
     val hasAdvancedToDriveStep = reminderTimes.isNotEmpty() || hasSkippedReminderSelection
-    val hasAdvancedToThemeStep = hasAdvancedToDriveStep && hasChosenGoogleDriveOption
+    val hasAdvancedToSyncModeStep = hasAdvancedToDriveStep && hasChosenGoogleDriveOption
+    val hasAdvancedToThemeStep = hasAdvancedToSyncModeStep && hasChosenSyncModeOption
     var showReminderIntro by rememberSaveable { mutableStateOf(false) }
     var showReminderNote by rememberSaveable { mutableStateOf(false) }
     var showGoogleDriveIntro by rememberSaveable { mutableStateOf(false) }
     var showGoogleDriveNote by rememberSaveable { mutableStateOf(false) }
+    var showSyncModeIntro by rememberSaveable { mutableStateOf(false) }
+    var showSyncModeNote by rememberSaveable { mutableStateOf(false) }
     var showThemeIntro by rememberSaveable { mutableStateOf(false) }
     var showThemeNote by rememberSaveable { mutableStateOf(false) }
     var showFinishPrompt by rememberSaveable { mutableStateOf(false) }
@@ -1506,9 +1518,18 @@ private fun OnboardingChatScreen(
         showGoogleDriveNote = true
     }
 
-    LaunchedEffect(hasAdvancedToThemeStep, showGoogleDriveNote, isInteractionLocked) {
+    LaunchedEffect(hasAdvancedToSyncModeStep, showGoogleDriveNote, isInteractionLocked) {
         if (isInteractionLocked) return@LaunchedEffect
-        if (!hasAdvancedToThemeStep || !showGoogleDriveNote || showThemeIntro) return@LaunchedEffect
+        if (!hasAdvancedToSyncModeStep || !showGoogleDriveNote || showSyncModeIntro) return@LaunchedEffect
+        kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+        showSyncModeIntro = true
+        kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+        showSyncModeNote = true
+    }
+
+    LaunchedEffect(hasAdvancedToThemeStep, showSyncModeNote, isInteractionLocked) {
+        if (isInteractionLocked) return@LaunchedEffect
+        if (!hasAdvancedToThemeStep || !showSyncModeNote || showThemeIntro) return@LaunchedEffect
         kotlinx.coroutines.delay(ONBOARDING_THEME_TRANSITION_DELAY_MS)
         showThemeIntro = true
         kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
@@ -1522,6 +1543,8 @@ private fun OnboardingChatScreen(
         showReminderNote,
         showGoogleDriveIntro,
         showGoogleDriveNote,
+        showSyncModeIntro,
+        showSyncModeNote,
         showThemeIntro,
         showThemeNote,
         showFinishPrompt
@@ -1532,6 +1555,8 @@ private fun OnboardingChatScreen(
             if (showReminderNote) count += 2
             if (showGoogleDriveIntro) count += 1
             if (showGoogleDriveNote) count += 2
+            if (showSyncModeIntro) count += 1
+            if (showSyncModeNote) count += 2
             if (showThemeIntro) count += 1
             if (showThemeNote) count += 1
             if (showFinishPrompt) count += 1
@@ -1646,6 +1671,35 @@ private fun OnboardingChatScreen(
                                     onConnectGoogleDrive()
                                 },
                                 onSkip = { hasChosenGoogleDriveOption = true }
+                            )
+                        }
+                    }
+                }
+                if (showSyncModeIntro) {
+                    item(key = "onboarding_sync_mode_intro") {
+                        MessageBubble(
+                            text = PROMPT_ONBOARDING_SYNC_MODE,
+                            isBot = true,
+                            animationKey = "onboarding_sync_mode_intro"
+                        )
+                    }
+                }
+                if (showSyncModeNote) {
+                    item(key = "onboarding_sync_mode_note") {
+                        MessageBubble(
+                            text = PROMPT_ONBOARDING_SYNC_MODE_NOTE,
+                            isBot = true,
+                            animationKey = "onboarding_sync_mode_note"
+                        )
+                    }
+                    item(key = "onboarding_sync_mode_card") {
+                        AnimatedChatContent(animationKey = "onboarding_sync_mode_card") {
+                            OnboardingSyncModeCard(
+                                selectedMode = googleDriveSyncMode,
+                                onSelectMode = {
+                                    hasChosenSyncModeOption = true
+                                    onSetGoogleDriveSyncMode(it)
+                                }
                             )
                         }
                     }
@@ -3247,6 +3301,44 @@ private fun OnboardingGoogleDriveCard(
     }
 }
 
+@Composable
+private fun OnboardingSyncModeCard(
+    selectedMode: GoogleDriveSyncMode,
+    onSelectMode: (GoogleDriveSyncMode) -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        border = BorderStroke(
+            width = 1.dp,
+            color = colorScheme.onSurface.copy(alpha = 0.12f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            SyncModeOption(
+                title = LABEL_SYNC_MODE_AUTO,
+                description = "チャット完了時や保存を押したときに同期します",
+                selected = selectedMode == GoogleDriveSyncMode.AutoOnSave,
+                onClick = { onSelectMode(GoogleDriveSyncMode.AutoOnSave) }
+            )
+            SyncModeOption(
+                title = LABEL_SYNC_MODE_MANUAL,
+                description = "設定から好きなタイミングで同期できます",
+                selected = selectedMode == GoogleDriveSyncMode.Manual,
+                onClick = { onSelectMode(GoogleDriveSyncMode.Manual) }
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderTimesCard(
@@ -4547,6 +4639,7 @@ private fun SyncModeSelectionDialog(
 @Composable
 private fun SyncModeOption(
     title: String,
+    description: String? = null,
     selected: Boolean,
     onClick: () -> Unit
 ) {
@@ -4567,14 +4660,25 @@ private fun SyncModeOption(
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
-        Text(
-            text = title,
+        Column(
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colorScheme.onSurface
-        )
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colorScheme.onSurface
+            )
+            if (!description.isNullOrBlank()) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurface.copy(alpha = 0.68f)
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = if (selected) LABEL_SELECTED else "",
