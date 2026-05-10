@@ -19,7 +19,6 @@ data class DiaryThemePalette(
 )
 
 const val DEFAULT_THEME_INTENSITY = 0.5f
-private const val MAX_EFFECTIVE_THEME_INTENSITY = 0.75f
 
 private data class DiaryThemeRecipe(
     val primary: Color,
@@ -27,8 +26,7 @@ private data class DiaryThemeRecipe(
     val tertiary: Color,
     val background: Color,
     val surface: Color,
-    val isDark: Boolean = false,
-    val invertIntensityControl: Boolean = false
+    val isDark: Boolean = false
 )
 
 private val BougainvilleaRecipe = DiaryThemeRecipe(
@@ -96,21 +94,79 @@ private val EcruBeigeRecipe = DiaryThemeRecipe(
 )
 
 private val IvoryBlackRecipe = DiaryThemeRecipe(
-    primary = Color(0xFFDBCDB1),
-    secondary = Color(0xFF8A99BC),
-    tertiary = Color(0xFF7EB898),
-    background = Color(0xFF151412),
-    surface = Color(0xFF211F1B),
+    primary = Color(0xFFB0B0B0),
+    secondary = Color(0xFFB0B0B0),
+    tertiary = Color(0xFFB0B0B0),
+    background = Color(0xFF3C3C3C),
+    surface = Color(0xFF3C3C3C),
     isDark = true
 )
 
-private val BlancDeZincRecipe = DiaryThemeRecipe(
-    primary = Color(0xFF76849A),
-    secondary = Color(0xFFC1C9D4),
-    tertiary = Color(0xFFB5936D),
-    background = Color(0xFFF4F5F2),
-    surface = Color(0xFFE5E7E3)
+private val WhiteRecipe = DiaryThemeRecipe(
+    primary = Color.Black,
+    secondary = Color.Black,
+    tertiary = Color.Black,
+    background = Color.White,
+    surface = Color.White
 )
+
+private fun ivoryBlackColorScheme(): ColorScheme =
+    darkColorScheme(
+        primary = Color(0xFFB0B0B0),
+        onPrimary = Color(0xFF3C3C3C),
+        primaryContainer = Color(0xFF646464),
+        onPrimaryContainer = Color.White,
+        secondary = Color(0xFFB0B0B0),
+        onSecondary = Color(0xFF3C3C3C),
+        secondaryContainer = Color(0xFF646464),
+        onSecondaryContainer = Color.White,
+        tertiary = Color(0xFFB0B0B0),
+        onTertiary = Color(0xFF3C3C3C),
+        tertiaryContainer = Color(0xFF646464),
+        onTertiaryContainer = Color.White,
+        background = Color(0xFF3C3C3C),
+        onBackground = Color.White,
+        surface = Color(0xFF3C3C3C),
+        onSurface = Color.White,
+        surfaceVariant = Color(0xFF646464),
+        onSurfaceVariant = Color.White,
+        outline = Color(0xFF646464),
+        outlineVariant = Color(0xFF646464),
+        inverseSurface = Color(0xFFB0B0B0),
+        inverseOnSurface = Color(0xFF3C3C3C),
+        inversePrimary = Color(0xFF3C3C3C),
+        surfaceTint = Color(0xFFB0B0B0),
+        scrim = Color.Black
+    )
+
+private fun pureWhiteColorScheme(): ColorScheme =
+    lightColorScheme(
+        primary = Color.Black,
+        onPrimary = Color.White,
+        primaryContainer = Color(0xFFFAFAFA),
+        onPrimaryContainer = Color.Black,
+        secondary = Color.Black,
+        onSecondary = Color.White,
+        secondaryContainer = Color(0xFFFAFAFA),
+        onSecondaryContainer = Color.Black,
+        tertiary = Color.Black,
+        onTertiary = Color.White,
+        tertiaryContainer = Color(0xFFFAFAFA),
+        onTertiaryContainer = Color.Black,
+        background = Color.White,
+        onBackground = Color.Black,
+        surface = Color.White,
+        onSurface = Color.Black,
+        surfaceVariant = Color(0xFFFAFAFA),
+        onSurfaceVariant = Color.Black,
+        outline = Color.Black,
+        outlineVariant = Color.Black,
+        inverseSurface = Color.Black,
+        inverseOnSurface = Color.White,
+        inversePrimary = Color.White,
+        surfaceTint = Color.Black,
+        scrim = Color.Black
+    )
 
 private fun themeRecipeFor(themePreset: AppThemePreset): DiaryThemeRecipe =
     when (themePreset) {
@@ -123,17 +179,27 @@ private fun themeRecipeFor(themePreset: AppThemePreset): DiaryThemeRecipe =
         AppThemePreset.Lilac -> LilacRecipe
         AppThemePreset.EcruBeige -> EcruBeigeRecipe
         AppThemePreset.IvoryBlack -> IvoryBlackRecipe
-        AppThemePreset.BlancDeZinc -> BlancDeZincRecipe
+        AppThemePreset.White -> WhiteRecipe
     }
 
 private fun buildPalette(
     recipe: DiaryThemeRecipe,
     themeIntensity: Float
 ): DiaryThemePalette {
-    val sliderIntensity = (themeIntensity.coerceIn(0f, 1f) * MAX_EFFECTIVE_THEME_INTENSITY).coerceIn(0f, 1f)
-    val intensity = sliderIntensity.let { normalizedIntensity ->
-        if (recipe.invertIntensityControl) 1f - normalizedIntensity else normalizedIntensity
+    if (recipe === IvoryBlackRecipe) {
+        return DiaryThemePalette(
+            colorScheme = ivoryBlackColorScheme(),
+            previewColors = listOf(Color(0xFF3C3C3C), Color(0xFF646464), Color(0xFFB0B0B0))
+        )
     }
+    if (recipe === WhiteRecipe) {
+        return DiaryThemePalette(
+            colorScheme = pureWhiteColorScheme(),
+            previewColors = listOf(Color.White, Color(0xFFFAFAFA), Color.Black)
+        )
+    }
+
+    val intensity = DEFAULT_THEME_INTENSITY
     val primary = adjustAccentColor(recipe.primary, intensity, recipe.isDark)
     val secondary = adjustAccentColor(recipe.secondary, intensity, recipe.isDark)
     val tertiary = adjustAccentColor(recipe.tertiary, intensity, recipe.isDark)
@@ -151,8 +217,8 @@ private fun buildPalette(
         isDark = recipe.isDark,
         isSurface = true
     )
-    val onBackground = if (recipe.isDark) Color(0xFFF2E7D6) else Ink
-    val onSurface = if (recipe.isDark) Color(0xFFF2E7D6) else Ink
+    val onBackground = if (recipe.isDark) Color.White else Ink
+    val onSurface = if (recipe.isDark) Color.White else Ink
     val colorScheme = if (recipe.isDark) {
         darkColorScheme(
             primary = primary,

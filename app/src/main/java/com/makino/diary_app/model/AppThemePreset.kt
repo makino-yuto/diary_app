@@ -13,10 +13,15 @@ enum class AppThemePreset(
     Lilac("lilac", "ライラック"),
     EcruBeige("ecru_beige", "エクルベージュ"),
     IvoryBlack("ivory_black", "アイボリーブラック"),
-    BlancDeZinc("blanc_de_zinc", "ブランドゥザンク");
+    White("white", "ホワイト");
 
     companion object {
         fun fromStorageValue(value: String?): AppThemePreset =
-            entries.firstOrNull { it.storageValue == value } ?: BlancDeZinc
+            when (value) {
+                "ivory_black" -> IvoryBlack
+                "black" -> IvoryBlack
+                "blanc_de_zinc" -> White
+                else -> entries.firstOrNull { it.storageValue == value } ?: White
+            }
     }
 }

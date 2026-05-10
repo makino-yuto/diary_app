@@ -27,7 +27,7 @@ data class DiaryUiState(
     val isLoading: Boolean = true,
     val entries: List<DiaryEntry> = emptyList(),
     val visibleMonth: YearMonth = YearMonth.now(),
-    val themePreset: AppThemePreset = AppThemePreset.BlancDeZinc,
+    val themePreset: AppThemePreset = AppThemePreset.White,
     val themeIntensity: Float = DEFAULT_THEME_INTENSITY,
     val reminderTimes: List<LocalTime> = emptyList(),
     val notificationsEnabled: Boolean = true,
@@ -109,8 +109,8 @@ class DiaryViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setThemeIntensity(themeIntensity: Float) {
-        repository.saveThemeIntensity(themeIntensity)
-        _uiState.update { it.copy(themeIntensity = themeIntensity.coerceIn(0f, 1f)) }
+        repository.saveThemeIntensity(DEFAULT_THEME_INTENSITY)
+        _uiState.update { it.copy(themeIntensity = DEFAULT_THEME_INTENSITY) }
     }
 
     fun addReminderTime(hour: Int, minute: Int) {

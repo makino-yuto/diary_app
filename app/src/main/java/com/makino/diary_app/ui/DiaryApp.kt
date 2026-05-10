@@ -3,6 +3,7 @@
 import android.Manifest
 import android.app.Activity
 import android.app.Application
+import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.ContextWrapper
@@ -65,6 +66,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.shape.CircleShape
@@ -80,6 +82,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -87,7 +90,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -126,11 +128,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -225,9 +230,6 @@ private const val LABEL_SETTINGS_SECTION_IMPORTANT = "\u91cd\u8981"
 private const val LABEL_SETTINGS_SECTION_SECURITY = "\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3"
 private const val LABEL_SETTINGS_SECTION_BACKUP = "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7"
 private const val LABEL_THEME = "\u30c6\u30fc\u30de"
-private const val LABEL_THEME_INTENSITY = "\u8272\u306e\u5f37\u3055"
-private const val LABEL_THEME_INTENSITY_SOFT = "\u6de1"
-private const val LABEL_THEME_INTENSITY_STRONG = "\u6fc3"
 private const val LABEL_NOTIFICATION_TIME = "\u901a\u77e5\u6642\u523b"
 private const val LABEL_NOTIFICATION_TOGGLE = "\u901a\u77e5\u306eON/OFF"
 private const val LABEL_DELETE_ALL_DATA = "\u5168\u30c7\u30fc\u30bf\u3092\u524a\u9664\u3059\u308b"
@@ -325,8 +327,164 @@ private const val PROMPT_ONBOARDING_SYNC_MODE = "Google Drive \u3068\u306e\u540c
 private const val PROMPT_ONBOARDING_SYNC_MODE_NOTE = "\u81ea\u52d5\u3092\u9078\u3076\u3068\u3001\u30c1\u30e3\u30c3\u30c8\u3092\u5b8c\u4e86\u3057\u305f\u3068\u304d\u3084\u65e5\u8a18\u753b\u9762\u3067\u4fdd\u5b58\u3092\u62bc\u3057\u305f\u3068\u304d\u306b Google Drive \u3078\u540c\u671f\u3055\u308c\u307e\u3059\n\u624b\u52d5\u3092\u9078\u3076\u3068\u3001\u8a2d\u5b9a\u304b\u3089\u597d\u304d\u306a\u30bf\u30a4\u30df\u30f3\u30b0\u3067\u540c\u671f\u3067\u304d\u307e\u3059"
 private const val PROMPT_ONBOARDING_THEME = "\u6b21\u306b\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u9078\u3073\u307e\u3057\u3087\u3046"
 private const val PROMPT_ONBOARDING_FINISH = "\u8a2d\u5b9a\u3067\u304d\u305f\u3089\u3001\u4e0b\u306e\u300c\u306f\u3058\u3081\u308b\u300d\u304b\u3089\u9032\u307f\u307e\u3057\u3087\u3046"
+private val PRIVACY_POLICY_TEXT = """
+プライバシーポリシー
+最終更新日: 2026-05-10
+
+1. 運営者
+本アプリ「まいにち日記」は Makino Yuto によって運営されています
+連絡先: contact@jinsei-makino.com
+
+2. 取得する情報
+本アプリでは、以下の情報を取り扱います
+
+・ユーザーが入力した日記本文
+・ユーザーが選択した写真や動画の参照情報
+・通知時刻、テーマ、認証設定などのアプリ設定情報
+・Google Drive 連携を有効にした場合の、連携に必要な Google アカウント情報
+
+本アプリは、氏名、住所、電話番号などの個人を直接特定できる情報を、入力させる目的で取得しません
+また、アクセス解析や広告配信のためのトラッキングは行っていません
+
+3. 利用目的
+取得した情報は、以下の目的で利用します
+
+・日記データの保存、表示、編集
+・写真や動画を日記に添付して表示するため
+・通知、テーマ、認証などの設定を反映するため
+・ユーザーが希望した場合に Google Drive へバックアップまたは同期するため
+
+4. 保存先
+日記本文、設定情報、認証設定などのデータは、主にユーザーの端末内に保存されます
+Google Drive 連携を有効にした場合は、日記データのみを Google Drive の マイドライブ/まいにち日記 に保存します
+テーマ、通知設定、認証設定などは Google Drive へ同期されず、端末内に保持されます
+
+5. 第三者サービスの利用
+本アプリは、必要に応じて以下の機能を利用します
+
+・Google Drive
+  ユーザーが連携を許可した場合に限り、日記データの保存、読み込み、同期のために利用します
+  本アプリは、ユーザーに許可された保存先と、アプリが扱う日記データ以外へアクセスしません
+
+・Android フォトピッカー等の端末機能
+  ユーザーが選択した写真や動画を日記に添付するために利用します
+
+・端末の生体認証または画面ロック機能
+  指紋認証などの本人確認機能を利用するために使われます
+
+6. データの削除
+ユーザーは、本アプリ内の操作により日記データを削除できます
+また、設定画面から全データ削除を実行することで、端末内に保存された日記データや設定を削除できます
+Google Drive に保存された日記データは、連携状態や保存内容に応じて別途削除される場合があります
+
+7. ユーザーの権利
+ユーザーは、自身のデータについて、確認、修正、削除を求めることができます
+本ポリシーやデータの取り扱いについてのお問い合わせは、上記連絡先までご連絡ください
+
+8. ポリシーの変更
+本ポリシーは、法令改正やサービス内容の変更に応じて改定される場合があります
+重要な変更がある場合は、アプリ内表示などの適切な方法でお知らせします
+""".trimIndent()
+private val TERMS_OF_USE_TEXT = """
+利用規約
+最終更新日: 2026-05-10
+
+この利用規約（以下「本規約」）は、Makino Yuto（以下「運営者」）が提供するアプリ「まいにち日記」（以下「本アプリ」）の利用条件を定めるものです
+本アプリを利用するユーザーは、本規約に同意したうえで本アプリを利用するものとします
+
+1. 本アプリの内容
+本アプリは、日記本文、写真、動画等を記録し、閲覧、編集、保存できる日記アプリです
+また、ユーザーが希望した場合に限り、Google Drive 連携によるバックアップまたは同期機能を利用できます
+
+2. 利用条件
+ユーザーは、自己の責任において本アプリを利用するものとします
+ユーザーは、法令または公序良俗に反する目的で本アプリを利用してはなりません
+ユーザーは、本アプリの運営を妨害する行為、第三者の権利を侵害する行為、不正アクセスその他これに類する行為をしてはなりません
+
+3. ユーザーデータ
+本アプリに入力または添付された日記本文、写真、動画その他のデータは、原則としてユーザー自身に帰属します
+ユーザーは、自らの判断と責任でデータを保存、編集、削除するものとします
+Google Drive 連携を有効にした場合、日記データはユーザーが指定または許可した保存先へ同期されます
+
+4. バックアップおよび同期
+本アプリは、端末の状態、通信環境、Google の提供状況その他の事情により、バックアップまたは同期が正常に完了しない場合があります
+運営者は、バックアップまたは同期の失敗、遅延、消失によって生じた損害について、故意または重過失がある場合を除き責任を負いません
+重要なデータについては、ユーザー自身の責任で管理してください
+
+5. 認証機能
+本アプリは、指紋認証やパスワード認証などのロック機能を提供する場合があります
+これらは端末の利用環境や設定に依存するため、すべての端末で同一の動作を保証するものではありません
+
+6. 禁止事項
+ユーザーは、以下の行為を行ってはなりません
+
+・法令または公序良俗に違反する行為
+・他人の権利、利益、名誉、プライバシー等を侵害する行為
+・本アプリまたは関連サービスの運営を妨害する行為
+・不正な手段で本アプリを利用する行為
+・本アプリの不具合や脆弱性を悪用する行為
+・その他、運営者が不適切と判断する行為
+
+7. 免責
+運営者は、本アプリの完全性、正確性、継続性、有用性、特定目的への適合性を保証するものではありません
+運営者は、本アプリの利用または利用不能によりユーザーに生じた損害について、運営者に故意または重過失がある場合を除き責任を負いません
+
+8. 本アプリの変更・停止
+運営者は、ユーザーへの事前通知なく、本アプリの全部または一部を変更、停止または終了することがあります
+
+9. 本規約の変更
+運営者は、必要と判断した場合、本規約を変更できるものとします
+重要な変更がある場合は、アプリ内表示などの適切な方法でお知らせします
+
+10. 準拠法および管轄
+本規約は日本法に準拠します
+本アプリに関して紛争が生じた場合は、運営者の所在地を管轄する裁判所を第一審の専属的合意管轄裁判所とします
+""".trimIndent()
+private val COMMERCIAL_DISCLOSURE_TEXT = """
+特定商取引法に基づく表記
+最終更新日: 2026-05-10
+
+販売事業者名
+Makino Yuto
+
+運営責任者
+Makino Yuto
+
+所在地
+請求があれば遅滞なく開示いたします
+
+電話番号
+請求があれば遅滞なく開示いたします
+
+お問い合わせ先
+contact@jinsei-makino.com
+
+販売価格
+現在、本アプリに有料プラン、アプリ内課金、追加購入機能はありません
+
+商品代金以外の必要料金
+本アプリの利用やダウンロードに伴う通信料は、ユーザーの負担となります
+
+代金の支払時期および方法
+現在、有料商品の提供はありません
+
+商品の引渡時期
+本アプリは、ユーザーの端末へインストールされた時点で利用可能となります
+
+返品・キャンセルについて
+現在、有料商品の提供はありません
+
+動作環境
+Android 端末での利用を想定しています
+ただし、すべての端末での完全な動作を保証するものではありません
+
+特記事項
+将来、本アプリに有料機能や課金機能を追加する場合は、本表記を更新します
+""".trimIndent()
 private val CHAT_TEXT_SIZE = 18.sp
 private val CHAT_LINE_HEIGHT = 28.sp
+private val UtilityActionButtonGray = Color(0xFFD9D9D9)
+private val UtilityActionButtonGrayDisabled = Color(0xFFBEBEBE)
 private const val ONBOARDING_MESSAGE_DELAY_MS = 1500L
 private const val ONBOARDING_THEME_TRANSITION_DELAY_MS = 1500L
 
@@ -352,6 +510,41 @@ private enum class DiaryMediaKind {
     Video
 }
 
+private fun androidx.compose.material3.ColorScheme.isPureWhiteTheme(): Boolean =
+    background == Color.White &&
+        surface == Color.White &&
+        primary == Color.Black &&
+        onSurface == Color.Black
+
+private fun androidx.compose.material3.ColorScheme.isPureBlackTheme(): Boolean =
+    background == Color(0xFF3C3C3C) &&
+        surface == Color(0xFF3C3C3C) &&
+        primary == Color(0xFFB0B0B0) &&
+        onSurface == Color.White
+
+private fun androidx.compose.material3.ColorScheme.isPureMonochromeTheme(): Boolean =
+    isPureWhiteTheme() || isPureBlackTheme()
+
+private fun androidx.compose.material3.ColorScheme.exactBorderColor(alpha: Float = 0.12f): Color =
+    if (isPureMonochromeTheme()) outline else onSurface.copy(alpha = alpha)
+
+private fun androidx.compose.material3.ColorScheme.secondaryTextColor(alpha: Float = 0.66f): Color =
+    if (isPureMonochromeTheme()) onSurface else onSurface.copy(alpha = alpha)
+
+private fun androidx.compose.material3.ColorScheme.calendarShellColor(): Color =
+    if (isPureMonochromeTheme()) surfaceVariant else surface
+
+private fun androidx.compose.material3.ColorScheme.calendarShellContentColor(): Color =
+    if (isPureMonochromeTheme()) onSurface else onSurface
+
+private fun legalBodyForTitle(title: String): String =
+    when (title) {
+        LABEL_TERMS_OF_USE -> TERMS_OF_USE_TEXT
+        LABEL_PRIVACY_POLICY -> PRIVACY_POLICY_TEXT
+        LABEL_COMMERCIAL_DISCLOSURE -> COMMERCIAL_DISCLOSURE_TEXT
+        else -> PROMPT_LEGAL_PREPARING
+    }
+
 private data class FullscreenDiaryMedia(
     val index: Int,
     val uri: String,
@@ -376,7 +569,7 @@ private fun BottomNavigationBar(
             .windowInsetsPadding(WindowInsets.navigationBars),
         shape = RectangleShape,
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
-        border = BorderStroke(1.dp, colorScheme.onSurface.copy(alpha = 0.12f))
+        border = BorderStroke(1.dp, colorScheme.exactBorderColor())
     ) {
         Row(
             modifier = Modifier
@@ -419,7 +612,11 @@ private fun BottomNavigationButton(
     onClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val contentColor = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.72f)
+    val contentColor = if (selected || colorScheme.isPureMonochromeTheme()) {
+        if (selected) colorScheme.primary else colorScheme.onSurface
+    } else {
+        colorScheme.onSurface.copy(alpha = 0.72f)
+    }
 
     Box(
         modifier = modifier
@@ -435,7 +632,7 @@ private fun BottomNavigationButton(
                     .width(38.dp)
                     .height(3.dp)
                     .clip(InlineShape)
-                    .background(colorScheme.primary.copy(alpha = 0.9f))
+                    .background(if (colorScheme.isPureMonochromeTheme()) colorScheme.primary else colorScheme.primary.copy(alpha = 0.9f))
             )
         }
         Column(
@@ -463,13 +660,37 @@ private fun BottomNavigationButton(
 
 @Composable
 private fun BottomNavigationDivider() {
+    val colorScheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .padding(vertical = 14.dp)
             .width(1.dp)
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+            .background(colorScheme.exactBorderColor())
     )
+}
+
+@Composable
+private fun UtilityActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        shape = ControlShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = UtilityActionButtonGray,
+            contentColor = Color.Black,
+            disabledContainerColor = UtilityActionButtonGrayDisabled,
+            disabledContentColor = Color.Black.copy(alpha = 0.56f)
+        )
+    ) {
+        Text(text)
+    }
 }
 
 @Composable
@@ -477,49 +698,56 @@ private fun ScreenBackdrop(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFFBF6EF),
-                        Paper,
-                        Color(0xFFF1ECE4)
+                if (colorScheme.isPureMonochromeTheme()) {
+                    SolidColor(colorScheme.background)
+                } else {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFFBF6EF),
+                            Paper,
+                            Color(0xFFF1ECE4)
+                        )
                     )
-                )
+                }
             )
     ) {
-        Box(
-            modifier = Modifier
-                .size(280.dp)
-                .align(Alignment.TopEnd)
-                .offset(x = 80.dp, y = (-64).dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            AccentPeach.copy(alpha = 0.34f),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = CircleShape
-                )
-        )
-        Box(
-            modifier = Modifier
-                .size(320.dp)
-                .align(Alignment.BottomStart)
-                .offset(x = (-96).dp, y = 96.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            MistBlue.copy(alpha = 0.75f),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = CircleShape
-                )
-        )
+        if (!colorScheme.isPureMonochromeTheme()) {
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 80.dp, y = (-64).dp)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                AccentPeach.copy(alpha = 0.34f),
+                                Color.Transparent
+                            )
+                        ),
+                        shape = CircleShape
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .size(320.dp)
+                    .align(Alignment.BottomStart)
+                    .offset(x = (-96).dp, y = 96.dp)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MistBlue.copy(alpha = 0.75f),
+                                Color.Transparent
+                            )
+                        ),
+                        shape = CircleShape
+                    )
+            )
+        }
         content()
     }
 }
@@ -530,11 +758,14 @@ private fun GlassPanel(
     contentPadding: PaddingValues = PaddingValues(20.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Card(
         modifier = modifier,
         shape = ScreenShape,
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.88f)),
-        border = BorderStroke(1.dp, SurfaceBorder.copy(alpha = 0.8f)),
+        colors = CardDefaults.cardColors(
+            containerColor = if (colorScheme.isPureMonochromeTheme()) colorScheme.surface else Color.White.copy(alpha = 0.88f)
+        ),
+        border = BorderStroke(1.dp, if (colorScheme.isPureMonochromeTheme()) colorScheme.exactBorderColor() else SurfaceBorder.copy(alpha = 0.8f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
     ) {
         Column(
@@ -550,20 +781,25 @@ private fun SectionPill(
     text: String,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        GoldSand.copy(alpha = 0.9f),
-                        AccentPeach.copy(alpha = 0.65f)
+                if (colorScheme.isPureMonochromeTheme()) {
+                    SolidColor(colorScheme.surface)
+                } else {
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            GoldSand.copy(alpha = 0.9f),
+                            AccentPeach.copy(alpha = 0.65f)
+                        )
                     )
-                )
+                }
             )
             .border(
                 width = 1.dp,
-                color = SurfaceBorder.copy(alpha = 0.75f),
+                color = if (colorScheme.isPureMonochromeTheme()) colorScheme.exactBorderColor() else SurfaceBorder.copy(alpha = 0.75f),
                 shape = RoundedCornerShape(999.dp)
             )
             .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -571,7 +807,7 @@ private fun SectionPill(
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = Ink
+            color = if (colorScheme.isPureMonochromeTheme()) colorScheme.onSurface else Ink
         )
     }
 }
@@ -624,6 +860,14 @@ fun DiaryApp(
             }
         }
     }
+    fun resetGoogleDriveRequestState() {
+        recoverableAuthAccount = null
+        recoverableAuthAction = null
+        pendingRecoverableAuthIntent = null
+        pendingGoogleDriveAction = GoogleDriveAction.RestoreFromDrive
+        isDriveRequestInFlight = false
+        isDriveSyncInFlight = false
+    }
     fun syncSignedInGoogleAccount(
         account: GoogleSignInAccount,
         action: GoogleDriveAction,
@@ -663,8 +907,7 @@ fun DiaryApp(
                     pendingRecoverableAuthIntent = error.intent
                     if (pendingRecoverableAuthIntent == null) {
                         backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
-                        isDriveRequestInFlight = false
-                        isDriveSyncInFlight = false
+                        resetGoogleDriveRequestState()
                         if (shouldShowCompactStatus) {
                             showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNC_FAILED_COMPACT, 1500)
                         }
@@ -677,8 +920,7 @@ fun DiaryApp(
                 if (shouldShowCompactStatus) {
                     showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNC_FAILED_COMPACT, 1500)
                 }
-                isDriveRequestInFlight = false
-                isDriveSyncInFlight = false
+                resetGoogleDriveRequestState()
                 return@launch
             }
             val accessToken = tokenResult.getOrThrow()
@@ -729,15 +971,14 @@ fun DiaryApp(
     ) { result ->
         val account = recoverableAuthAccount
         val action = recoverableAuthAction ?: GoogleDriveAction.RestoreFromDrive
+        if (result.resultCode != Activity.RESULT_OK || account == null) {
+            backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+            resetGoogleDriveRequestState()
+            return@rememberLauncherForActivityResult
+        }
         recoverableAuthAccount = null
         recoverableAuthAction = null
         pendingRecoverableAuthIntent = null
-        if (result.resultCode != Activity.RESULT_OK || account == null) {
-            backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
-            isDriveRequestInFlight = false
-            isDriveSyncInFlight = false
-            return@rememberLauncherForActivityResult
-        }
         syncSignedInGoogleAccount(account, action = action, interactive = true)
     }
     LaunchedEffect(pendingRecoverableAuthIntent) {
@@ -749,7 +990,7 @@ fun DiaryApp(
     ) { result ->
         if (result.resultCode != Activity.RESULT_OK) {
             backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
-            isDriveSyncInFlight = false
+            resetGoogleDriveRequestState()
             return@rememberLauncherForActivityResult
         }
         val account = runCatching {
@@ -757,8 +998,7 @@ fun DiaryApp(
                 .getResult(ApiException::class.java)
         }.getOrElse {
             backupStatusMessage = it.message ?: PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
-            isDriveRequestInFlight = false
-            isDriveSyncInFlight = false
+            resetGoogleDriveRequestState()
             return@rememberLauncherForActivityResult
         }
         syncSignedInGoogleAccount(account, action = pendingGoogleDriveAction, interactive = true)
@@ -797,12 +1037,7 @@ fun DiaryApp(
         isDriveRequestInFlight = true
         isDriveSyncInFlight = true
         googleSignInClient.signOut().addOnCompleteListener { task ->
-            recoverableAuthAccount = null
-            recoverableAuthAction = null
-            pendingRecoverableAuthIntent = null
-            pendingGoogleDriveAction = GoogleDriveAction.RestoreFromDrive
-            isDriveRequestInFlight = false
-            isDriveSyncInFlight = false
+            resetGoogleDriveRequestState()
             if (task.isSuccessful) {
                 viewModel.disconnectGoogleDrive()
                 backupStatusMessage = PROMPT_GOOGLE_DRIVE_LOGOUT_SUCCESS
@@ -958,7 +1193,7 @@ fun DiaryApp(
                     shadowElevation = 6.dp,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                        color = MaterialTheme.colorScheme.exactBorderColor(0.08f)
                     )
                 ) {
                     Row(
@@ -998,7 +1233,7 @@ fun DiaryApp(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                        color = MaterialTheme.colorScheme.exactBorderColor(0.08f)
                     )
                 ) {
                     Column(
@@ -1021,7 +1256,7 @@ fun DiaryApp(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = JetBrainsMsGothicFontFamily
                             ),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                            color = MaterialTheme.colorScheme.secondaryTextColor(0.68f),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -1102,7 +1337,7 @@ private fun AppLockScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = ScreenShape,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.exactBorderColor(0.1f))
             ) {
                 Column(
                     modifier = Modifier
@@ -1120,7 +1355,7 @@ private fun AppLockScreen(
                     Text(
                         text = PROMPT_SECURITY_LOCK,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                        color = MaterialTheme.colorScheme.secondaryTextColor(0.72f)
                     )
                     if (isFingerprintEnabled) {
                         FilledTonalButton(
@@ -1224,6 +1459,14 @@ private fun DiaryNavigation(
             popUpTo(navController.graph.findStartDestination().id)
             launchSingleTop = true
         }
+    }
+    val openDateInViewMode: (LocalDate) -> Unit = { date ->
+        onEnsureDraft(date)
+        navController.navigate(diaryRoute(date))
+    }
+    val openDateInEditMode: (LocalDate) -> Unit = { date ->
+        onEnsureDraft(date)
+        navController.navigate(diaryRoute(date, edit = true))
     }
     val openSettings = {
         navController.navigate(ROUTE_SETTINGS) {
@@ -1365,16 +1608,18 @@ private fun DiaryNavigation(
                 onOpenDiaryMenu = openDiaryMenu,
                 onOpenCalendar = openCalendar,
                 onOpenSettings = openSettings,
-                onOpenDate = { date ->
-                    onEnsureDraft(date)
-                    navController.navigate(diaryRoute(date))
-                }
+                onOpenDate = openDateInViewMode,
+                onEditDate = openDateInEditMode
             )
         }
         composable(ROUTE_DIARY_MENU) {
             DiaryMenuScreen(
                 uiState = uiState,
-                onOpenEntry = { date -> navController.navigate(diaryRoute(date)) },
+                onOpenEntry = openDateInViewMode,
+                onEditToday = {
+                    onEnsureTodayDraft()
+                    navController.navigate(diaryRoute(today, edit = true))
+                },
                 onOpenDiaryMenu = openDiaryMenu,
                 onOpenCalendar = openCalendar,
                 onOpenSettings = openSettings
@@ -1449,6 +1694,13 @@ private fun DiaryNavigation(
                 onBack = { navController.popBackStack() },
                 startInEditMode = startInEditMode,
                 onEnsureDraft = onEnsureDraft,
+                onOpenDate = { selectedDate, editMode ->
+                    onEnsureDraft(selectedDate)
+                    navController.navigate(diaryRoute(selectedDate, edit = editMode)) {
+                        popUpTo(backStackEntry.destination.id) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 onSaveText = { currentDate, text ->
                     onSaveDiaryText(currentDate, text)
                     onAutoSyncDiarySave()
@@ -1483,10 +1735,14 @@ private fun OnboardingChatScreen(
     val listState = rememberLazyListState()
     var hasSkippedReminderSelection by rememberSaveable { mutableStateOf(false) }
     var hasChosenGoogleDriveOption by rememberSaveable { mutableStateOf(false) }
+    var hasSkippedGoogleDriveLinking by rememberSaveable { mutableStateOf(false) }
     var hasChosenSyncModeOption by rememberSaveable { mutableStateOf(false) }
     val hasAdvancedToDriveStep = reminderTimes.isNotEmpty() || hasSkippedReminderSelection
-    val hasAdvancedToSyncModeStep = hasAdvancedToDriveStep && hasChosenGoogleDriveOption
-    val hasAdvancedToThemeStep = hasAdvancedToSyncModeStep && hasChosenSyncModeOption
+    val hasAdvancedToSyncModeStep =
+        hasAdvancedToDriveStep && hasChosenGoogleDriveOption && !hasSkippedGoogleDriveLinking
+    val hasAdvancedToThemeStep =
+        hasAdvancedToDriveStep && hasChosenGoogleDriveOption &&
+            (hasSkippedGoogleDriveLinking || hasChosenSyncModeOption)
     var showReminderIntro by rememberSaveable { mutableStateOf(false) }
     var showReminderNote by rememberSaveable { mutableStateOf(false) }
     var showGoogleDriveIntro by rememberSaveable { mutableStateOf(false) }
@@ -1527,10 +1783,21 @@ private fun OnboardingChatScreen(
         showSyncModeNote = true
     }
 
-    LaunchedEffect(hasAdvancedToThemeStep, showSyncModeNote, isInteractionLocked) {
+    LaunchedEffect(
+        hasAdvancedToThemeStep,
+        hasSkippedGoogleDriveLinking,
+        showGoogleDriveNote,
+        showSyncModeNote,
+        isInteractionLocked
+    ) {
         if (isInteractionLocked) return@LaunchedEffect
-        if (!hasAdvancedToThemeStep || !showSyncModeNote || showThemeIntro) return@LaunchedEffect
-        kotlinx.coroutines.delay(ONBOARDING_THEME_TRANSITION_DELAY_MS)
+        val canAdvanceToTheme =
+            if (hasSkippedGoogleDriveLinking) showGoogleDriveNote else showSyncModeNote
+        if (!hasAdvancedToThemeStep || !canAdvanceToTheme || showThemeIntro) return@LaunchedEffect
+        kotlinx.coroutines.delay(
+            if (hasSkippedGoogleDriveLinking) ONBOARDING_MESSAGE_DELAY_MS
+            else ONBOARDING_THEME_TRANSITION_DELAY_MS
+        )
         showThemeIntro = true
         kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
         showThemeNote = true
@@ -1668,9 +1935,13 @@ private fun OnboardingChatScreen(
                                 backupAccountEmail = backupAccountEmail,
                                 onConnect = {
                                     hasChosenGoogleDriveOption = true
+                                    hasSkippedGoogleDriveLinking = false
                                     onConnectGoogleDrive()
                                 },
-                                onSkip = { hasChosenGoogleDriveOption = true }
+                                onSkip = {
+                                    hasChosenGoogleDriveOption = true
+                                    hasSkippedGoogleDriveLinking = true
+                                }
                             )
                         }
                     }
@@ -1903,7 +2174,7 @@ private fun ChatComposerBar(
                             .background(MaterialTheme.colorScheme.background)
                             .border(
                                 width = 1.dp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                                color = MaterialTheme.colorScheme.exactBorderColor(),
                                 shape = ControlShape
                             )
                             .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -1915,7 +2186,7 @@ private fun ChatComposerBar(
                                 style = MaterialTheme.typography.bodyLarge.copy(
                                     fontSize = CHAT_TEXT_SIZE,
                                     lineHeight = CHAT_LINE_HEIGHT,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f)
+                                    color = MaterialTheme.colorScheme.secondaryTextColor(0.46f)
                                 ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1993,6 +2264,8 @@ private fun MessageBubble(
                 colors = CardDefaults.cardColors(
                     containerColor = if (isBot) {
                         MaterialTheme.colorScheme.surface
+                    } else if (MaterialTheme.colorScheme.isPureMonochromeTheme()) {
+                        MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
                     }
@@ -2063,11 +2336,17 @@ private fun CalendarScreen(
     onOpenDiaryMenu: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenDate: (LocalDate) -> Unit
+    onOpenDate: (LocalDate) -> Unit,
+    onEditDate: (LocalDate) -> Unit
 ) {
     val days = remember(uiState.visibleMonth) { calendarDays(uiState.visibleMonth) }
+    val colorScheme = MaterialTheme.colorScheme
+    val isMonochrome = colorScheme.isPureMonochromeTheme()
+    val calendarShellColor = colorScheme.calendarShellColor()
+    val calendarShellContentColor = colorScheme.calendarShellContentColor()
     var selectedDate by rememberSaveable(uiState.visibleMonth) { mutableStateOf<LocalDate?>(null) }
     var isMonthPickerVisible by rememberSaveable { mutableStateOf(false) }
+    val selectedEntry = selectedDate?.let(uiState::entryFor)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -2079,15 +2358,6 @@ private fun CalendarScreen(
                 onOpenCalendar = onOpenCalendar,
                 onOpenSettings = onOpenSettings
             )
-        },
-        floatingActionButton = {
-            Button(
-                onClick = { selectedDate?.let(onOpenDate) },
-                enabled = selectedDate != null,
-                shape = ControlShape
-            ) {
-                Text(LABEL_VIEW)
-            }
         }
     ) { innerPadding ->
         Column(
@@ -2098,14 +2368,20 @@ private fun CalendarScreen(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = LABEL_CALENDAR_TITLE,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontFamily = JetBrainsMsGothicFontFamily
-                    )
+                    ),
+                    color = colorScheme.onBackground
+                )
+                UtilityActionButton(
+                    text = LABEL_EDIT,
+                    onClick = { selectedDate?.let(onEditDate) },
+                    enabled = selectedDate != null,
                 )
             }
 
@@ -2113,7 +2389,8 @@ private fun CalendarScreen(
 
             Card(
                 shape = ScreenShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(containerColor = calendarShellColor),
+                border = BorderStroke(1.dp, colorScheme.exactBorderColor())
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -2121,14 +2398,20 @@ private fun CalendarScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onPreviousMonth) { Text(LABEL_PREVIOUS_MONTH) }
+                        TextButton(
+                            onClick = onPreviousMonth,
+                            colors = ButtonDefaults.textButtonColors(contentColor = calendarShellContentColor)
+                        ) { Text(LABEL_PREVIOUS_MONTH) }
                         Row(
                             modifier = Modifier
                                 .clip(ControlShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                                .background(
+                                    if (isMonochrome) colorScheme.background
+                                    else colorScheme.primary.copy(alpha = 0.08f)
+                                )
                                 .border(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                                    color = if (isMonochrome) colorScheme.onBackground else colorScheme.primary.copy(alpha = 0.22f),
                                     shape = ControlShape
                                 )
                                 .clickable { isMonthPickerVisible = true }
@@ -2142,17 +2425,21 @@ private fun CalendarScreen(
                                 ),
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontFamily = JetBrainsMsGothicFontFamily
-                                )
+                                ),
+                                color = if (isMonochrome) colorScheme.onBackground else colorScheme.onSurface
                             )
                             Text(
                                 text = "\u25be",
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontFamily = JetBrainsMsGothicFontFamily
                                 ),
-                                color = MaterialTheme.colorScheme.primary
+                                color = if (isMonochrome) colorScheme.onBackground else colorScheme.primary
                             )
                         }
-                        TextButton(onClick = onNextMonth) { Text(LABEL_NEXT_MONTH) }
+                        TextButton(
+                            onClick = onNextMonth,
+                            colors = ButtonDefaults.textButtonColors(contentColor = calendarShellContentColor)
+                        ) { Text(LABEL_NEXT_MONTH) }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(modifier = Modifier.fillMaxWidth()) {
@@ -2169,7 +2456,8 @@ private fun CalendarScreen(
                                 text = label,
                                 modifier = Modifier.weight(1f),
                                 textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelLarge
+                                style = MaterialTheme.typography.labelLarge,
+                                color = calendarShellContentColor
                             )
                         }
                     }
@@ -2181,7 +2469,9 @@ private fun CalendarScreen(
                         ) {
                             week.forEach { day ->
                                 DayCell(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1f),
                                     date = day,
                                     hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
                                     isSelected = day != null && day == selectedDate,
@@ -2201,6 +2491,15 @@ private fun CalendarScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
+            }
+
+            selectedDate?.let { date ->
+                Spacer(modifier = Modifier.height(14.dp))
+                CalendarSelectedEntryCard(
+                    date = date,
+                    entry = selectedEntry,
+                    onClick = { onOpenDate(date) }
+                )
             }
         }
 
@@ -2266,12 +2565,20 @@ private fun CalendarMonthPickerDialog(
                                 shape = ControlShape,
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                        if (MaterialTheme.colorScheme.isPureMonochromeTheme()) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                        }
                                     } else {
                                         MaterialTheme.colorScheme.surface
                                     },
                                     contentColor = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
+                                        if (MaterialTheme.colorScheme.isPureMonochromeTheme()) {
+                                            MaterialTheme.colorScheme.background
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        }
                                     } else {
                                         MaterialTheme.colorScheme.onSurface
                                     }
@@ -2293,11 +2600,83 @@ private fun CalendarMonthPickerDialog(
     )
 }
 
+@Composable
+private fun CalendarSelectedEntryCard(
+    date: LocalDate,
+    entry: DiaryEntry?,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val previewText = entry?.userText?.takeIf { it.isNotBlank() } ?: PROMPT_EMPTY_DIARY
+    val previewPhoto = entry?.photoUris?.firstOrNull()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        border = BorderStroke(1.dp, colorScheme.exactBorderColor())
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = date.format(DateTimeFormatter.ofPattern("yy/MM/dd", Locale.JAPAN)),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = JetBrainsMsGothicFontFamily
+                    ),
+                    color = colorScheme.onSurface
+                )
+                Text(
+                    text = previewText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.secondaryTextColor(0.9f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (previewPhoto != null) {
+                val previewMediaKind = rememberDiaryMediaKind(previewPhoto)
+                Box(
+                    modifier = Modifier
+                        .size(width = 88.dp, height = 88.dp)
+                        .clip(ControlShape)
+                ) {
+                    AsyncImage(
+                        model = rememberMediaModel(
+                            context = context,
+                            uriString = previewPhoto,
+                            mediaKind = previewMediaKind
+                        ),
+                        contentDescription = "カレンダープレビュー",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    if (previewMediaKind == DiaryMediaKind.Video) {
+                        VideoBadge(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DiaryMenuScreen(
     uiState: DiaryUiState,
     onOpenEntry: (LocalDate) -> Unit,
+    onEditToday: () -> Unit,
     onOpenDiaryMenu: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit
@@ -2319,6 +2698,18 @@ private fun DiaryMenuScreen(
                 onOpenCalendar = onOpenCalendar,
                 onOpenSettings = onOpenSettings
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onEditToday,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_nav_diary),
+                    contentDescription = LABEL_EDIT
+                )
+            }
         }
     ) { innerPadding ->
         Column(
@@ -2445,14 +2836,15 @@ private fun DiaryMenuMonthHeader(
     month: YearMonth,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Surface(
         modifier = modifier,
         shape = ControlShape,
-        color = MaterialTheme.colorScheme.surface,
+        color = colorScheme.surface,
         shadowElevation = 2.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            color = colorScheme.exactBorderColor(0.08f)
         )
     ) {
         Text(
@@ -2461,7 +2853,7 @@ private fun DiaryMenuMonthHeader(
             style = MaterialTheme.typography.titleLarge.copy(
                 fontFamily = JetBrainsMsGothicFontFamily
             ),
-            color = MaterialTheme.colorScheme.onSurface
+            color = colorScheme.onSurface
         )
     }
 }
@@ -2473,13 +2865,15 @@ private fun DiaryMenuEntryCard(
 ) {
     val previewPhoto = entry.photoUris.firstOrNull()
     val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = PanelShape,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        border = BorderStroke(1.dp, colorScheme.exactBorderColor())
     ) {
         Row(
             modifier = Modifier.padding(18.dp),
@@ -2867,17 +3261,16 @@ private fun SettingsScreen(
                     trailingText = formatReminderSummary(reminderTimes),
                     onClick = onOpenReminderSettings
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsSwitchRow(
                     title = LABEL_NOTIFICATION_TOGGLE,
                     checked = notificationsEnabled,
                     onCheckedChange = onSetNotificationsEnabled
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_THEME,
                     supportingText = PROMPT_THEME_SETTINGS_NOTE,
-                    trailingText = themePreset.label,
                     onClick = onOpenThemeSelection
                 )
             }
@@ -2890,17 +3283,17 @@ private fun SettingsScreen(
                     titleColor = colorScheme.error,
                     onClick = { showDeleteDialog = true }
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_TERMS_OF_USE,
                     onClick = { legalDialogTitle = LABEL_TERMS_OF_USE }
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_PRIVACY_POLICY,
                     onClick = { legalDialogTitle = LABEL_PRIVACY_POLICY }
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_COMMERCIAL_DISCLOSURE,
                     onClick = { legalDialogTitle = LABEL_COMMERCIAL_DISCLOSURE }
@@ -2915,7 +3308,7 @@ private fun SettingsScreen(
                     checked = fingerprintAuthEnabled,
                     onCheckedChange = handleFingerprintToggle
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsSwitchRow(
                     title = LABEL_PASSWORD_AUTH,
                     supportingText = PROMPT_PASSWORD_ROW_NOTE,
@@ -2934,7 +3327,7 @@ private fun SettingsScreen(
                     trailingText = backupAccountEmail ?: if (isGoogleDriveLinked) LABEL_CONNECTED else LABEL_UNSET,
                     onClick = onConnectGoogleDrive
                 )
-                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_SYNC_METHOD,
                     supportingText = PROMPT_SYNC_METHOD_NOTE,
@@ -2942,13 +3335,13 @@ private fun SettingsScreen(
                     onClick = { showSyncModeDialog = true }
                 )
                 if (hasGoogleDriveSession) {
-                    HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                    HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                     SettingsActionRow(
                         title = LABEL_SYNC_NOW,
                         supportingText = PROMPT_SYNC_NOW_NOTE,
                         onClick = onManualGoogleDriveSync
                     )
-                    HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                    HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                     SettingsActionRow(
                         title = LABEL_LOGOUT,
                         onClick = onDisconnectGoogleDrive
@@ -2963,7 +3356,7 @@ private fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontFamily = JetBrainsMsGothicFontFamily
                 ),
-                color = colorScheme.onSurface.copy(alpha = 0.52f),
+                color = colorScheme.secondaryTextColor(0.52f),
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -3007,7 +3400,13 @@ private fun SettingsScreen(
                 )
             },
             text = {
-                Text(PROMPT_LEGAL_PREPARING)
+                Box(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(legalBodyForTitle(title))
+                }
             }
         )
     }
@@ -3090,6 +3489,12 @@ private fun PasswordSetupDialog(
     var newPassword by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    val passwordFieldTextStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontFamily = JetBrainsMsGothicFontFamily
+    )
+    val passwordFieldLabelStyle = MaterialTheme.typography.bodySmall.copy(
+        fontFamily = JetBrainsMsGothicFontFamily
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3137,14 +3542,18 @@ private fun PasswordSetupDialog(
                             currentPassword = it
                             errorMessage = null
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
                         singleLine = true,
-                        label = { Text(LABEL_CURRENT_PASSWORD) },
+                        textStyle = passwordFieldTextStyle,
+                        label = { Text(text = LABEL_CURRENT_PASSWORD, style = passwordFieldLabelStyle) },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
                             imeAction = ImeAction.Next
-                        )
+                        ),
+                        shape = ControlShape
                     )
                 }
                 OutlinedTextField(
@@ -3153,14 +3562,18 @@ private fun PasswordSetupDialog(
                         newPassword = it
                         errorMessage = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
                     singleLine = true,
-                    label = { Text(LABEL_NEW_PASSWORD) },
+                    textStyle = passwordFieldTextStyle,
+                    label = { Text(text = LABEL_NEW_PASSWORD, style = passwordFieldLabelStyle) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Next
-                    )
+                    ),
+                    shape = ControlShape
                 )
                 OutlinedTextField(
                     value = confirmPassword,
@@ -3168,14 +3581,18 @@ private fun PasswordSetupDialog(
                         confirmPassword = it
                         errorMessage = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
                     singleLine = true,
-                    label = { Text(LABEL_CONFIRM_PASSWORD) },
+                    textStyle = passwordFieldTextStyle,
+                    label = { Text(text = LABEL_CONFIRM_PASSWORD, style = passwordFieldLabelStyle) },
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Done
-                    )
+                    ),
+                    shape = ControlShape
                 )
                 errorMessage?.let { message ->
                     Text(
@@ -3205,7 +3622,7 @@ private fun OnboardingReminderCard(
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
+            color = colorScheme.exactBorderColor()
         )
     ) {
         Column(
@@ -3262,7 +3679,7 @@ private fun OnboardingGoogleDriveCard(
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
+            color = colorScheme.exactBorderColor()
         )
     ) {
         Column(
@@ -3290,7 +3707,7 @@ private fun OnboardingGoogleDriveCard(
                 ) {
                     Text(LABEL_LOGIN_WITH_GOOGLE)
                 }
-                OutlinedButton(
+                TextButton(
                     onClick = onSkip,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -3314,7 +3731,7 @@ private fun OnboardingSyncModeCard(
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
+            color = colorScheme.exactBorderColor()
         )
     ) {
         Column(
@@ -3354,7 +3771,7 @@ private fun ReminderTimesCard(
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
+            color = colorScheme.exactBorderColor()
         )
     ) {
         Column(
@@ -3382,7 +3799,7 @@ private fun ReminderTimesCard(
                     Text(
                         text = PROMPT_NOTIFICATION_TIME_NOTE,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = colorScheme.secondaryTextColor(0.7f)
                     )
                 }
                 FilledTonalButton(onClick = onAddReminderTime) {
@@ -3394,7 +3811,7 @@ private fun ReminderTimesCard(
                 Text(
                     text = LABEL_UNSET,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.onSurface.copy(alpha = 0.58f)
+                    color = colorScheme.secondaryTextColor(0.58f)
                 )
             } else {
                 FlowRow(
@@ -3419,12 +3836,19 @@ private fun ReminderTimeChip(
     onRemove: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val isMonochrome = colorScheme.isPureMonochromeTheme()
 
     Row(
         modifier = Modifier
             .clip(ControlShape)
-            .background(colorScheme.primary.copy(alpha = 0.12f))
-            .border(1.dp, colorScheme.primary.copy(alpha = 0.22f), ControlShape)
+            .background(
+                if (isMonochrome) colorScheme.surface else colorScheme.primary.copy(alpha = 0.12f)
+            )
+            .border(
+                1.dp,
+                if (isMonochrome) colorScheme.onSurface else colorScheme.primary.copy(alpha = 0.22f),
+                ControlShape
+            )
             .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -3434,7 +3858,7 @@ private fun ReminderTimeChip(
             style = MaterialTheme.typography.labelLarge.copy(
                 fontFamily = JetBrainsMsGothicFontFamily
             ),
-            color = colorScheme.primary
+            color = if (isMonochrome) colorScheme.onSurface else colorScheme.primary
         )
         TextButton(
             onClick = onRemove,
@@ -3445,6 +3869,19 @@ private fun ReminderTimeChip(
     }
 }
 
+private val ThemeDisplayOrder = listOf(
+    AppThemePreset.White,
+    AppThemePreset.IvoryBlack,
+    AppThemePreset.Bougainvillea,
+    AppThemePreset.CyclamenPink,
+    AppThemePreset.Apricot,
+    AppThemePreset.CreamYellow,
+    AppThemePreset.SpringGreen,
+    AppThemePreset.HorizonBlue,
+    AppThemePreset.EcruBeige,
+    AppThemePreset.Lilac
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ThemeSelectionInlineCard(
@@ -3454,18 +3891,6 @@ private fun ThemeSelectionInlineCard(
     onThemeIntensityChange: (Float) -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val inlineThemeOrder = listOf(
-        AppThemePreset.Bougainvillea,
-        AppThemePreset.CyclamenPink,
-        AppThemePreset.Apricot,
-        AppThemePreset.CreamYellow,
-        AppThemePreset.SpringGreen,
-        AppThemePreset.HorizonBlue,
-        AppThemePreset.EcruBeige,
-        AppThemePreset.Lilac,
-        AppThemePreset.BlancDeZinc,
-        AppThemePreset.IvoryBlack
-    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -3473,7 +3898,7 @@ private fun ThemeSelectionInlineCard(
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
+            color = colorScheme.exactBorderColor()
         )
     ) {
         Column(
@@ -3482,7 +3907,7 @@ private fun ThemeSelectionInlineCard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            inlineThemeOrder.forEach { theme ->
+            ThemeDisplayOrder.forEach { theme ->
                 ThemeInlineChip(
                     themePreset = theme,
                     themeIntensity = themeIntensity,
@@ -3490,11 +3915,6 @@ private fun ThemeSelectionInlineCard(
                     onClick = { onSelectThemePreset(theme) }
                 )
             }
-            HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
-            ThemeIntensityControl(
-                themeIntensity = themeIntensity,
-                onThemeIntensityChange = onThemeIntensityChange
-            )
         }
     }
 }
@@ -3509,37 +3929,22 @@ private fun ThemeInlineChip(
     val colorScheme = MaterialTheme.colorScheme
     val previewColors = paletteForTheme(themePreset, themeIntensity).previewColors
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clip(ControlShape)
-            .background(
-                if (isSelected) colorScheme.primary.copy(alpha = 0.12f)
-                else colorScheme.background
-            )
+            .background(colorScheme.background)
             .border(
-                width = 1.dp,
-                color = if (isSelected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.12f),
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) colorScheme.primary else colorScheme.exactBorderColor(),
                 shape = ControlShape
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        contentAlignment = Alignment.Center
     ) {
-        ThemePreviewRow(previewColors = previewColors)
-        Text(
-            text = themePreset.label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontFamily = JetBrainsMsGothicFontFamily
-            ),
-            color = if (isSelected) colorScheme.primary else colorScheme.onSurface,
-            textAlign = TextAlign.End,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        ThemePreviewRow(previewColors = previewColors, swatchSize = 28.dp)
     }
 }
 
@@ -3548,6 +3953,7 @@ private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -3556,15 +3962,15 @@ private fun SettingsSection(
             style = MaterialTheme.typography.labelLarge.copy(
                 fontFamily = JetBrainsMsGothicFontFamily
             ),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
+            color = colorScheme.secondaryTextColor(0.74f)
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = PanelShape,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
             border = BorderStroke(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                color = colorScheme.exactBorderColor()
             )
         ) {
             Column(
@@ -3608,7 +4014,7 @@ private fun SettingsActionRow(
                 Text(
                     text = supportingText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.onSurface.copy(alpha = 0.66f)
+                    color = colorScheme.secondaryTextColor()
                 )
             }
         }
@@ -3619,7 +4025,7 @@ private fun SettingsActionRow(
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontFamily = JetBrainsMsGothicFontFamily
                 ),
-                color = colorScheme.primary,
+                color = if (colorScheme.isPureMonochromeTheme()) colorScheme.onSurface else colorScheme.primary,
                 textAlign = TextAlign.End,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -3664,7 +4070,7 @@ private fun SettingsSwitchRow(
                 Text(
                     text = supportingText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.onSurface.copy(alpha = 0.66f)
+                    color = colorScheme.secondaryTextColor()
                 )
             }
         }
@@ -3777,14 +4183,8 @@ private fun ThemeSelectionScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                item(key = "theme_intensity_control") {
-                    ThemeIntensityCard(
-                        themeIntensity = themeIntensity,
-                        onThemeIntensityChange = onThemeIntensityChange
-                    )
-                }
-                items(AppThemePreset.entries.size) { index ->
-                    val themePreset = AppThemePreset.entries[index]
+                items(ThemeDisplayOrder.size) { index ->
+                    val themePreset = ThemeDisplayOrder[index]
                     ThemePresetCard(
                         themePreset = themePreset,
                         themeIntensity = themeIntensity,
@@ -3812,140 +4212,37 @@ private fun ThemePresetCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = PanelShape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                colorScheme.primary.copy(alpha = 0.12f)
-            } else {
-                colorScheme.surface
-            }
-        ),
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
-            width = 1.dp,
-            color = if (isSelected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.12f)
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) colorScheme.primary else colorScheme.exactBorderColor()
         )
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            contentAlignment = Alignment.Center
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = themePreset.label,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = JetBrainsMsGothicFontFamily
-                    ),
-                    color = colorScheme.onSurface
-                )
-                ThemePreviewRow(previewColors = previewColors)
-            }
-            Text(
-                text = if (isSelected) LABEL_SELECTED else LABEL_CHANGE,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontFamily = JetBrainsMsGothicFontFamily
-                ),
-                color = if (isSelected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.56f)
-            )
+            ThemePreviewRow(previewColors = previewColors, swatchSize = 32.dp)
         }
     }
 }
 
 @Composable
-private fun ThemeIntensityCard(
-    themeIntensity: Float,
-    onThemeIntensityChange: (Float) -> Unit
+private fun ThemePreviewRow(
+    previewColors: List<Color>,
+    swatchSize: Dp = 24.dp
 ) {
     val colorScheme = MaterialTheme.colorScheme
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = PanelShape,
-        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
-        border = BorderStroke(
-            width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
-        )
-    ) {
-        ThemeIntensityControl(
-            themeIntensity = themeIntensity,
-            onThemeIntensityChange = onThemeIntensityChange,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
-        )
-    }
-}
-
-@Composable
-private fun ThemeIntensityControl(
-    themeIntensity: Float,
-    onThemeIntensityChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val normalizedIntensity = themeIntensity.coerceIn(0f, 1f)
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = LABEL_THEME_INTENSITY,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = JetBrainsMsGothicFontFamily
-                ),
-                color = colorScheme.onSurface
-            )
-            Text(
-                text = "${(normalizedIntensity * 100).roundToInt()}%",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontFamily = JetBrainsMsGothicFontFamily
-                ),
-                color = colorScheme.primary
-            )
-        }
-        Slider(
-            value = normalizedIntensity,
-            onValueChange = onThemeIntensityChange,
-            valueRange = 0f..1f
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = LABEL_THEME_INTENSITY_SOFT,
-                style = MaterialTheme.typography.bodySmall,
-                color = colorScheme.onSurface.copy(alpha = 0.62f)
-            )
-            Text(
-                text = LABEL_THEME_INTENSITY_STRONG,
-                style = MaterialTheme.typography.bodySmall,
-                color = colorScheme.onSurface.copy(alpha = 0.62f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ThemePreviewRow(previewColors: List<Color>) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        previewColors.forEach { previewColor ->
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(previewColor)
-                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f), CircleShape)
-            )
-        }
-    }
+    val previewColor = previewColors.firstOrNull() ?: colorScheme.primary
+    Box(
+        modifier = Modifier
+            .size(swatchSize)
+            .clip(CircleShape)
+            .background(previewColor)
+            .border(1.dp, colorScheme.exactBorderColor(0.1f), CircleShape)
+    )
 }
 
 private fun Context.findComponentActivity(): FragmentActivity? {
@@ -4044,23 +4341,37 @@ private fun DayCell(
     onClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val isMonochrome = colorScheme.isPureMonochromeTheme()
+    val cellShape = RoundedCornerShape(16.dp)
+    val todayIndicatorColor = Color(0xFFE53935)
+    val entryIndicatorColor = Color(0xFF2EAD4B)
+    val backgroundColor = when {
+        isMonochrome && isSelected -> colorScheme.onBackground
+        isMonochrome -> colorScheme.background
+        isSelected -> colorScheme.primary.copy(alpha = 0.18f)
+        hasEntry -> colorScheme.surface
+        else -> colorScheme.background
+    }
+    val borderColor = when {
+        isMonochrome && isSelected -> colorScheme.primary
+        isMonochrome -> colorScheme.exactBorderColor()
+        isSelected -> colorScheme.primary
+        else -> Color.Transparent
+    }
+    val textColor = when {
+        isMonochrome && isSelected -> colorScheme.background
+        isMonochrome -> colorScheme.onBackground
+        else -> colorScheme.onBackground
+    }
 
     Box(
         modifier = modifier
-            .height(58.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                when {
-                    isSelected -> colorScheme.primary.copy(alpha = 0.18f)
-                    isToday -> colorScheme.secondary.copy(alpha = 0.55f)
-                    hasEntry -> colorScheme.surface
-                    else -> colorScheme.background
-                }
-            )
+            .clip(cellShape)
+            .background(backgroundColor)
             .border(
                 width = 1.dp,
-                color = if (isSelected || isToday) colorScheme.primary else Color.Transparent,
-                shape = RoundedCornerShape(16.dp)
+                color = borderColor,
+                shape = cellShape
             )
             .clickable(enabled = date != null, onClick = onClick),
         contentAlignment = Alignment.Center
@@ -4068,18 +4379,34 @@ private fun DayCell(
         if (date != null) {
             Text(
                 text = date.dayOfMonth.toString(),
-                color = colorScheme.onBackground,
+                color = textColor,
                 style = MaterialTheme.typography.bodyMedium
             )
-            if (hasEntry) {
-                Box(
+            if (hasEntry || isToday) {
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 7.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(colorScheme.tertiary)
-                )
+                        .padding(bottom = 7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isToday) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(todayIndicatorColor)
+                        )
+                    }
+                    if (hasEntry) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(entryIndicatorColor)
+                        )
+                    }
+                }
             }
         }
     }
@@ -4092,6 +4419,7 @@ private fun DiaryScreen(
     startInEditMode: Boolean,
     onBack: () -> Unit,
     onEnsureDraft: (LocalDate) -> Unit,
+    onOpenDate: (LocalDate, Boolean) -> Unit,
     onSaveText: (LocalDate, String) -> Unit,
     onSavePhotos: (LocalDate, List<Uri>) -> Unit,
     onRemovePhoto: (LocalDate, String) -> Unit,
@@ -4099,6 +4427,7 @@ private fun DiaryScreen(
     onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val context = LocalContext.current
     LaunchedEffect(date, entry) {
         if (date != null && entry == null) {
             onEnsureDraft(date)
@@ -4114,6 +4443,7 @@ private fun DiaryScreen(
         targetValue = if (isEditing) (imeBottom - navigationBottom).coerceAtLeast(0.dp) else 0.dp,
         label = "diaryLift"
     )
+    var horizontalDragTotal by remember(date, isEditing) { mutableStateOf(0f) }
 
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
@@ -4154,6 +4484,25 @@ private fun DiaryScreen(
                 .statusBarsPadding()
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = diaryLift)
+                .pointerInput(date, isEditing) {
+                    if (isEditing) return@pointerInput
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { _, dragAmount ->
+                            horizontalDragTotal += dragAmount
+                        },
+                        onDragEnd = {
+                            val currentDate = entry.date
+                            when {
+                                horizontalDragTotal <= -56f -> onOpenDate(currentDate.plusDays(1), false)
+                                horizontalDragTotal >= 56f -> onOpenDate(currentDate.minusDays(1), false)
+                            }
+                            horizontalDragTotal = 0f
+                        },
+                        onDragCancel = {
+                            horizontalDragTotal = 0f
+                        }
+                    )
+                }
                 .padding(16.dp)
         ) {
             Row(
@@ -4164,27 +4513,26 @@ private fun DiaryScreen(
                 TextButton(onClick = onBack) { Text(LABEL_BACK) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (isEditing) {
-                        FilledTonalButton(
+                        UtilityActionButton(
+                            text = LABEL_ADD_MEDIA,
                             onClick = {
                                 photoPicker.launch(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                                 )
                             }
-                        ) {
-                            Text(LABEL_ADD_MEDIA)
-                        }
-                        FilledTonalButton(
+                        )
+                        UtilityActionButton(
+                            text = LABEL_SAVE,
                             onClick = {
                                 onSaveText(entry.date, editText)
                                 isEditing = false
                             }
-                        ) {
-                            Text(LABEL_SAVE)
-                        }
+                        )
                     } else {
-                        FilledTonalButton(onClick = { isEditing = true }) {
-                            Text(LABEL_EDIT)
-                        }
+                        UtilityActionButton(
+                            text = LABEL_EDIT,
+                            onClick = { isEditing = true }
+                        )
                     }
                 }
             }
@@ -4195,6 +4543,17 @@ private fun DiaryScreen(
                 isEditing = isEditing,
                 editText = editText,
                 onEditTextChange = { editText = it },
+                onDateClick = {
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, dayOfMonth ->
+                            onOpenDate(LocalDate.of(year, month + 1, dayOfMonth), isEditing)
+                        },
+                        entry.date.year,
+                        entry.date.monthValue - 1,
+                        entry.date.dayOfMonth
+                    ).show()
+                },
                 onRemovePhoto = { photoUri -> onRemovePhoto(entry.date, photoUri) }
             )
         }
@@ -4208,6 +4567,7 @@ private fun LinedDiaryPaper(
     isEditing: Boolean,
     editText: String,
     onEditTextChange: (String) -> Unit,
+    onDateClick: () -> Unit,
     onRemovePhoto: (String) -> Unit
 ) {
     Box(
@@ -4224,8 +4584,10 @@ private fun LinedDiaryPaper(
         ) {
             Text(
                 text = entry.date.format(DateTimeFormatter.ofPattern("yy/MM/dd", Locale.JAPAN)),
+                modifier = Modifier.clickable(onClick = onDateClick),
                 style = MaterialTheme.typography.bodyLarge.copy(
-                    fontFamily = JetBrainsMsGothicFontFamily
+                    fontFamily = JetBrainsMsGothicFontFamily,
+                    textDecoration = TextDecoration.Underline
                 ),
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -4255,20 +4617,40 @@ private fun LinedTextSection(
     isEditing: Boolean,
     onTextChange: (String) -> Unit
 ) {
-    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val lineColor = if (isDarkTheme) {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val colorScheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val textStyle = MaterialTheme.typography.bodyLarge.copy(color = colorScheme.onSurface)
+    val lineHeight = with(density) { textStyle.lineHeight.toDp() }
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val isDarkTheme = colorScheme.background.luminance() < 0.5f
+    val lineColor = if (colorScheme.isPureMonochromeTheme()) {
+        colorScheme.onSurface
+    } else if (isDarkTheme) {
+        colorScheme.onSurface.copy(alpha = 0.18f)
     } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+        colorScheme.primary.copy(alpha = 0.22f)
     }
 
     Box(
         modifier = modifier
-            .heightIn(min = DIARY_LINE_HEIGHT)
+            .heightIn(min = lineHeight)
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
-            val lineSpacing = DIARY_LINE_HEIGHT.toPx()
+            val lineSpacing = textStyle.lineHeight.toPx()
+            val layout = textLayoutResult
             var currentY = lineSpacing
+            if (layout != null && layout.lineCount > 0) {
+                repeat(layout.lineCount) { index ->
+                    val lineY = layout.getLineBottom(index)
+                    drawLine(
+                        color = lineColor,
+                        start = Offset(0f, lineY),
+                        end = Offset(size.width, lineY),
+                        strokeWidth = 2f
+                    )
+                    currentY = lineY + lineSpacing
+                }
+            }
             while (currentY <= size.height + 1f) {
                 drawLine(
                     color = lineColor,
@@ -4284,12 +4666,13 @@ private fun LinedTextSection(
             onValueChange = onTextChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = DIARY_LINE_HEIGHT),
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                .heightIn(min = lineHeight),
+            textStyle = textStyle,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
             readOnly = !isEditing,
+            onTextLayout = { textLayoutResult = it },
             cursorBrush = SolidColor(
-                if (isEditing) MaterialTheme.colorScheme.onSurface else Color.Transparent
+                if (isEditing) colorScheme.onSurface else Color.Transparent
             ),
             minLines = 1
         )
@@ -4372,16 +4755,20 @@ private fun PhotoColumn(
                         )
                     }
                     if (isEditing) {
+                        val colorScheme = MaterialTheme.colorScheme
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .offset(x = 10.dp, y = (-10).dp)
                                 .size(24.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f))
+                                .background(
+                                    if (colorScheme.isPureMonochromeTheme()) colorScheme.background
+                                    else colorScheme.background.copy(alpha = 0.92f)
+                                )
                                 .border(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+                                    color = colorScheme.exactBorderColor(0.18f),
                                     shape = CircleShape
                                 )
                                 .clickable { onRemovePhoto(uri) },
@@ -4390,7 +4777,7 @@ private fun PhotoColumn(
                             Text(
                                 text = "\u00d7",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = colorScheme.onSurface
                             )
                         }
                     }
@@ -4644,17 +5031,26 @@ private fun SyncModeOption(
     onClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val isMonochrome = colorScheme.isPureMonochromeTheme()
+    val containerColor = when {
+        selected && isMonochrome -> colorScheme.primary
+        selected -> colorScheme.primary.copy(alpha = 0.12f)
+        else -> colorScheme.surface
+    }
+    val borderColor = if (selected && !isMonochrome) colorScheme.primary else colorScheme.exactBorderColor()
+    val titleColor = if (selected && isMonochrome) colorScheme.background else colorScheme.onSurface
+    val descriptionColor =
+        if (selected && isMonochrome) colorScheme.background else colorScheme.secondaryTextColor(0.68f)
+    val selectedLabelColor = if (selected && isMonochrome) colorScheme.background else colorScheme.primary
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(ControlShape)
-            .background(
-                if (selected) colorScheme.primary.copy(alpha = 0.12f)
-                else colorScheme.surface
-            )
+            .background(containerColor)
             .border(
                 width = 1.dp,
-                color = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.08f),
+                color = borderColor,
                 shape = ControlShape
             )
             .clickable(onClick = onClick)
@@ -4669,13 +5065,13 @@ private fun SyncModeOption(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = colorScheme.onSurface
+                color = titleColor
             )
             if (!description.isNullOrBlank()) {
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.onSurface.copy(alpha = 0.68f)
+                    color = descriptionColor
                 )
             }
         }
@@ -4685,7 +5081,7 @@ private fun SyncModeOption(
             style = MaterialTheme.typography.labelLarge.copy(
                 fontFamily = JetBrainsMsGothicFontFamily
             ),
-            color = colorScheme.primary
+            color = selectedLabelColor
         )
     }
 }

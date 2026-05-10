@@ -37,12 +37,11 @@ class DiaryRepository(context: Context) {
             .apply()
     }
 
-    fun loadThemeIntensity(): Float =
-        prefs.getFloat(KEY_THEME_INTENSITY, DEFAULT_THEME_INTENSITY).coerceIn(0f, 1f)
+    fun loadThemeIntensity(): Float = DEFAULT_THEME_INTENSITY
 
     fun saveThemeIntensity(themeIntensity: Float) {
         prefs.edit()
-            .putFloat(KEY_THEME_INTENSITY, themeIntensity.coerceIn(0f, 1f))
+            .putFloat(KEY_THEME_INTENSITY, DEFAULT_THEME_INTENSITY)
             .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
             .apply()
     }
