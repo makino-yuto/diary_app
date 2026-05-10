@@ -1,17 +1,16 @@
 # まいにち日記
 Android / Kotlin / Jetpack Compose
 
-AI と会話するような流れで、毎日の出来事を日記として残せる Android アプリです。
+毎日の出来事を日記として残せる Android アプリです。
 
 Google ログインなしでも使えます。必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。
 
 ## リリース
-- [GitHub Releases](https://github.com/makino-yuto/diary_app/releases)
 - [最新 APK v1.0.0-debug](https://github.com/makino-yuto/diary_app/releases/download/v1.0.0-debug/mainichi-diary-v1.0.0-debug.apk)
 
 ## 主な機能
-- チャット形式の日記作成
-  LINE や Discord のような UI で、その日の出来事を会話形式で記録
+- 日記作成
+  その日の出来事を入力しながら日記を作成
 - カレンダー表示
   日付ごとに日記の有無を確認して、好きな日の日記を閲覧
 - 日記タブ
@@ -30,15 +29,6 @@ Google ログインなしでも使えます。必要な場合だけ Google Drive
   指紋認証とパスワード認証に対応
 - Google Drive 同期
   日記データを Drive にバックアップして、別端末で復元可能
-
-## 画面構成
-タブ
-
-| タブ | 内容 |
-| --- | --- |
-| 日記 | 保存済みの日記の一覧表示 |
-| カレンダー | 日付ごとの日記閲覧・作成導線 |
-| 設定 | 通知、テーマ、セキュリティ、バックアップ設定 |
 
 ## 同期・保存
 - 日記データは基本的に端末内へ保存
@@ -74,7 +64,3 @@ Windows の場合
 ## 動作要件
 - Android 8.0 以上
 - minSdk 26
-
-## 補足
-- 現在 Releases に置いている APK は `debug` ビルドです
-- 今後、署名付き release APK / AAB へ切り替え可能です
