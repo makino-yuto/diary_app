@@ -73,7 +73,9 @@ object DiaryReminderScheduler {
 
     fun showReminderNotification(context: Context) {
         ensureNotificationChannel(context)
-        if (DiaryRepository(context).getEntry(LocalDate.now())?.isCompleted == true) return
+        val repository = DiaryRepository(context)
+        if (!repository.isNotificationsEnabled()) return
+        if (repository.getEntry(LocalDate.now())?.isCompleted == true) return
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(

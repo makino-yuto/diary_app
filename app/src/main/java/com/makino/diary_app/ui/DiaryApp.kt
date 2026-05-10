@@ -4,12 +4,18 @@ import android.Manifest
 import android.app.Activity
 import android.app.Application
 import android.app.TimePickerDialog
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,6 +26,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,13 +83,18 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -114,11 +127,14 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
@@ -130,15 +146,32 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.fragment.app.FragmentActivity
 import coil3.compose.AsyncImage
 import coil3.compose.rememberAsyncImagePainter
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.UserRecoverableAuthException
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.Scopes
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
 import com.makino.diary_app.R
 import com.makino.diary_app.data.DiaryEntry
 import com.makino.diary_app.model.AppThemePreset
+import com.makino.diary_app.model.GoogleDriveSyncMode
 import com.makino.diary_app.ui.theme.AccentGreen
 import com.makino.diary_app.ui.theme.AccentPeach
+import com.makino.diary_app.ui.theme.DEFAULT_THEME_INTENSITY
 import com.makino.diary_app.ui.theme.GoldSand
 import com.makino.diary_app.ui.theme.Ink
 import com.makino.diary_app.ui.theme.JetBrainsMsGothicFontFamily
@@ -151,13 +184,18 @@ import com.makino.diary_app.ui.theme.SurfaceBorder
 import com.makino.diary_app.ui.theme.WarmBrown
 import com.makino.diary_app.ui.theme.DiaryappTheme
 import com.makino.diary_app.ui.theme.paletteForTheme
+import coil3.request.ImageRequest
+import coil3.video.videoFrameMillis
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private const val ROUTE_SPLASH = "splash"
@@ -172,6 +210,9 @@ private const val ROUTE_DIARY_PREFIX = "diary"
 private const val ARG_EDIT = "edit"
 private val DIARY_LINE_HEIGHT = 36.dp
 private val ScreenShape = RoundedCornerShape(30.dp)
+private val PanelShape = RoundedCornerShape(22.dp)
+private val ControlShape = RoundedCornerShape(18.dp)
+private val InlineShape = RoundedCornerShape(999.dp)
 
 private const val LABEL_CALENDAR_TITLE = "\u30ab\u30ec\u30f3\u30c0\u30fc"
 private const val LABEL_DIARY_MENU = "\u65e5\u8a18"
@@ -179,8 +220,40 @@ private const val LABEL_DIARY_MENU_TITLE = "\u65e5\u8a18"
 private const val LABEL_CALENDAR_TAB = "\u30ab\u30ec\u30f3\u30c0\u30fc"
 private const val LABEL_SETTINGS = "\u8a2d\u5b9a"
 private const val LABEL_SETTINGS_TITLE = "\u8a2d\u5b9a"
+private const val LABEL_SETTINGS_SECTION_NOTIFICATION_THEME = "\u901a\u77e5/\u30c6\u30fc\u30de"
+private const val LABEL_SETTINGS_SECTION_IMPORTANT = "\u91cd\u8981"
+private const val LABEL_SETTINGS_SECTION_SECURITY = "\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3"
+private const val LABEL_SETTINGS_SECTION_BACKUP = "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7"
 private const val LABEL_THEME = "\u30c6\u30fc\u30de"
+private const val LABEL_THEME_INTENSITY = "\u8272\u306e\u5f37\u3055"
+private const val LABEL_THEME_INTENSITY_SOFT = "\u6de1"
+private const val LABEL_THEME_INTENSITY_STRONG = "\u6fc3"
 private const val LABEL_NOTIFICATION_TIME = "\u901a\u77e5\u6642\u523b"
+private const val LABEL_NOTIFICATION_TOGGLE = "\u901a\u77e5\u306eON/OFF"
+private const val LABEL_DELETE_ALL_DATA = "\u5168\u30c7\u30fc\u30bf\u3092\u524a\u9664\u3059\u308b"
+private const val LABEL_TERMS_OF_USE = "\u5229\u7528\u898f\u7d04"
+private const val LABEL_PRIVACY_POLICY = "\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc"
+private const val LABEL_COMMERCIAL_DISCLOSURE = "\u7279\u5b9a\u5546\u53d6\u5f15\u6cd5\u306b\u57fa\u3065\u304f\u8868\u8a18"
+private const val LABEL_FINGERPRINT_AUTH = "\u6307\u7d0b\u8a8d\u8a3c"
+private const val LABEL_PASSWORD_AUTH = "\u30d1\u30b9\u30ef\u30fc\u30c9\u8a8d\u8a3c"
+private const val LABEL_BACKUP = "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7"
+private const val LABEL_RESTORE_DATA = "\u30c7\u30fc\u30bf\u306e\u5fa9\u5143"
+private const val LABEL_GOOGLE_ACCOUNT = "Google\u30a2\u30ab\u30a6\u30f3\u30c8"
+private const val LABEL_SYNC_METHOD = "\u540c\u671f\u65b9\u6cd5"
+private const val LABEL_SYNC_NOW = "\u4eca\u3059\u3050\u540c\u671f"
+private const val LABEL_LOGIN_WITH_GOOGLE = "Google\u3067\u30ed\u30b0\u30a4\u30f3"
+private const val LABEL_LOGOUT = "\u30ed\u30b0\u30a2\u30a6\u30c8"
+private const val LABEL_SET_PASSWORD = "\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u8a2d\u5b9a"
+private const val LABEL_CHANGE_PASSWORD = "\u30d1\u30b9\u30ef\u30fc\u30c9\u3092\u5909\u66f4"
+private const val LABEL_CURRENT_PASSWORD = "\u73fe\u5728\u306e\u30d1\u30b9\u30ef\u30fc\u30c9"
+private const val LABEL_NEW_PASSWORD = "\u65b0\u3057\u3044\u30d1\u30b9\u30ef\u30fc\u30c9"
+private const val LABEL_CONFIRM_PASSWORD = "\u78ba\u8a8d\u7528\u30d1\u30b9\u30ef\u30fc\u30c9"
+private const val LABEL_UNLOCK = "\u30ed\u30c3\u30af\u3092\u89e3\u9664"
+private const val LABEL_USE_FINGERPRINT = "\u6307\u7d0b\u3067\u8a8d\u8a3c"
+private const val LABEL_DELETE = "\u524a\u9664"
+private const val LABEL_CANCEL = "\u30ad\u30e3\u30f3\u30bb\u30eb"
+private const val LABEL_CLOSE = "\u9589\u3058\u308b"
+private const val LABEL_SETTING_VERSION = "\u00a9\u307e\u3044\u306b\u3061\u65e5\u8a18 version1.0.0"
 private const val LABEL_SELECT_TIME = "\u6642\u9593\u3092\u9078\u3076"
 private const val LABEL_LATER = "\u3042\u3068\u3067"
 private const val LABEL_CHANGE = "\u5909\u66f4"
@@ -188,10 +261,11 @@ private const val LABEL_UNSET = "\u672a\u8a2d\u5b9a"
 private const val LABEL_ADD_TIME = "\u8ffd\u52a0"
 private const val LABEL_REMOVE = "\u524a\u9664"
 private const val LABEL_SELECTED = "\u9078\u629e\u4e2d"
+private const val LABEL_CONNECTED = "\u30ed\u30b0\u30a4\u30f3\u6e08\u307f"
 private const val LABEL_PREVIOUS_MONTH = "\u524d\u6708"
 private const val LABEL_NEXT_MONTH = "\u6b21\u6708"
-private const val LABEL_PICK_PHOTO = "\u5199\u771f\u3092\u9078\u629e"
-private const val LABEL_ADD_PHOTO = "\u5199\u771f\u3092\u8ffd\u52a0"
+private const val LABEL_PICK_MEDIA = "\u5199\u771f\u3084\u52d5\u753b\u3092\u9078\u629e"
+private const val LABEL_ADD_MEDIA = "\u5199\u771f\u3084\u52d5\u753b\u3092\u8ffd\u52a0"
 private const val LABEL_NO_PHOTO = "\u306a\u3044"
 private const val LABEL_FINISH = "\u5b8c\u4e86"
 private const val LABEL_BACK = "\u623b\u308b"
@@ -200,9 +274,9 @@ private const val LABEL_EDIT = "\u7de8\u96c6"
 private const val LABEL_SAVE = "\u4fdd\u5b58"
 private const val LABEL_START = "\u306f\u3058\u3081\u308b"
 private const val PROMPT_FALLBACK = "\u4eca\u65e5\u306f\u3069\u3093\u306a\u4e00\u65e5\u3067\u3057\u305f\u304b\uff1f"
-private const val PROMPT_PHOTO_QUESTION = "\u6b8b\u3057\u3066\u304a\u304d\u305f\u3044\u5199\u771f\u306f\u3042\u308a\u307e\u3059\u304b\uff1f\u4f55\u679a\u3067\u3082\u9078\u629e\u53ef\u80fd\u3067\u3059"
-private const val PROMPT_NO_PHOTO_SAVED = "\u4eca\u65e5\u306f\u5199\u771f\u306a\u3057\u3067\u307e\u3068\u3081\u3066\u304a\u304d\u307e\u3057\u305f\u3002"
-private const val PROMPT_PHOTO_SAVED = "\u3053\u306e\u5199\u771f\u305f\u3061\u3092\u4eca\u65e5\u306e\u65e5\u8a18\u306b\u8cbc\u3063\u3066\u304a\u304d\u307e\u3059\u306d\u3002"
+private const val PROMPT_PHOTO_QUESTION = "\u6b8b\u3057\u3066\u304a\u304d\u305f\u3044\u5199\u771f\u3084\u52d5\u753b\u306f\u3042\u308a\u307e\u3059\u304b\uff1f\u4f55\u679a\u3067\u3082\u9078\u629e\u53ef\u80fd\u3067\u3059"
+private const val PROMPT_NO_PHOTO_SAVED = "\u4eca\u65e5\u306f\u5199\u771f\u3084\u52d5\u753b\u306a\u3057\u3067\u307e\u3068\u3081\u3066\u304a\u304d\u307e\u3057\u305f"
+private const val PROMPT_PHOTO_SAVED = "\u3053\u306e\u5199\u771f\u3084\u52d5\u753b\u3092\u4eca\u65e5\u306e\u65e5\u8a18\u306b\u8cbc\u3063\u3066\u304a\u304d\u307e\u3059\u306d"
 private const val PROMPT_PLACEHOLDER = "\u4eca\u65e5\u306e\u3053\u3068\u3092\u307e\u3068\u3081\u3066\u307f\u307e\u3057\u3087\u3046"
 private const val PROMPT_EDIT_NOTE = "\u4f1a\u8a71\u3092\u4fdd\u5b58\u3057\u305f\u3042\u3068\u3082\u3001\u30ab\u30ec\u30f3\u30c0\u30fc\u304b\u3089\u3044\u3064\u3067\u3082\u66f8\u304d\u76f4\u305b\u307e\u3059\u3002"
 private const val PROMPT_CALENDAR_STYLE_NOTE = "\u66f8\u304d\u305f\u3044\u65e5\u3092\u9078\u3093\u3067\u3001\u305d\u306e\u307e\u307e\u7de8\u96c6\u3067\u304d\u307e\u3059\u3002"
@@ -212,7 +286,39 @@ private const val PROMPT_THEME_NOTE = "\u8868\u793a\u30c6\u30fc\u30de\u3092\u907
 private const val PROMPT_NOTIFICATION_TIME_NOTE = "\u305d\u306e\u65e5\u306e\u65e5\u8a18\u304c\u672a\u8a18\u5165\u306e\u3068\u304d\u3060\u3051\u3001\u8a2d\u5b9a\u3057\u305f\u6642\u9593\u306b\u901a\u77e5\u3057\u307e\u3059\n\u8907\u6570\u8ffd\u52a0\u3067\u304d\u307e\u3059"
 private const val PROMPT_THEME_SETTINGS_NOTE = "\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059"
 private const val PROMPT_NOTIFICATION_SETTINGS_NOTE = "\u901a\u77e5\u6642\u523b\u3092\u8a2d\u5b9a\u3067\u304d\u307e\u3059"
+private const val PROMPT_SECURITY_PREPARING = "\u3053\u306e\u6a5f\u80fd\u306f\u3053\u308c\u304b\u3089\u4f5c\u308a\u8fbc\u3093\u3067\u3044\u304d\u307e\u3059"
+private const val PROMPT_LEGAL_PREPARING = "\u3053\u306e\u5185\u5bb9\u306f\u6e96\u5099\u4e2d\u3067\u3059"
+private const val PROMPT_DELETE_ALL_DATA = "\u4fdd\u5b58\u6e08\u307f\u306e\u65e5\u8a18\u3001\u901a\u77e5\u8a2d\u5b9a\u3001\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\u8a2d\u5b9a\u3092\u3059\u3079\u3066\u524a\u9664\u3057\u307e\u3059\u304b"
+private const val PROMPT_SECURITY_LOCK = "\u30a2\u30d7\u30ea\u3092\u958b\u304f\u306b\u306f\u8a8d\u8a3c\u304c\u5fc5\u8981\u3067\u3059"
+private const val PROMPT_PASSWORD_MINIMUM = "\u30d1\u30b9\u30ef\u30fc\u30c9\u306f4\u6587\u5b57\u4ee5\u4e0a\u3067\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044"
+private const val PROMPT_PASSWORD_MISMATCH = "\u78ba\u8a8d\u7528\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u4e00\u81f4\u3057\u307e\u305b\u3093"
+private const val PROMPT_PASSWORD_INCORRECT = "\u73fe\u5728\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u9055\u3044\u307e\u3059"
+private const val PROMPT_PASSWORD_LOCK_FAILED = "\u30d1\u30b9\u30ef\u30fc\u30c9\u304c\u9055\u3044\u307e\u3059"
+private const val PROMPT_BIOMETRIC_FAILED = "\u8a8d\u8a3c\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+private const val PROMPT_PASSWORD_ROW_NOTE = "\u30bf\u30c3\u30d7\u3067\u8a2d\u5b9a\u307e\u305f\u306f\u5909\u66f4\u3067\u304d\u307e\u3059"
+private const val PROMPT_BIOMETRIC_UNAVAILABLE = "\u3053\u306e\u7aef\u672b\u3067\u306f\u6307\u7d0b\u8a8d\u8a3c\u3092\u5229\u7528\u3067\u304d\u307e\u305b\u3093"
+private const val PROMPT_BIOMETRIC_NOT_ENROLLED = "\u7aef\u672b\u306b\u6307\u7d0b\u307e\u305f\u306f\u7aef\u672b\u8a8d\u8a3c\u304c\u767b\u9332\u3055\u308c\u3066\u3044\u307e\u305b\u3093"
+private const val PROMPT_BIOMETRIC_TEMPORARY_ERROR = "\u3044\u307e\u306f\u6307\u7d0b\u8a8d\u8a3c\u3092\u5229\u7528\u3067\u304d\u307e\u305b\u3093"
+private const val PROMPT_BACKUP_SUCCESS = "\u30c7\u30fc\u30bf\u3092\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u3057\u307e\u3057\u305f"
+private const val PROMPT_BACKUP_FAILED = "\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+private const val PROMPT_RESTORE_SUCCESS = "\u30c7\u30fc\u30bf\u3092\u5fa9\u5143\u3057\u307e\u3057\u305f"
+private const val PROMPT_RESTORE_FAILED = "\u30c7\u30fc\u30bf\u306e\u5fa9\u5143\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+private const val PROMPT_BACKUP_DIRECTORY_NOTE = "Google Drive \u306e \u30de\u30a4\u30c9\u30e9\u30a4\u30d6/\u307e\u3044\u306b\u3061\u65e5\u8a18 \u3068\u9023\u643a\u3067\u304d\u307e\u3059"
+private const val PROMPT_SYNC_METHOD_NOTE = "\u4fdd\u5b58\u6642\u3060\u3051\u81ea\u52d5\u3067\u540c\u671f\u3059\u308b\u304b \u624b\u52d5\u3067\u540c\u671f\u3059\u308b\u304b\u9078\u3079\u307e\u3059"
+private const val PROMPT_SYNC_NOW_NOTE = "\u73fe\u5728\u306e\u65e5\u8a18\u30c7\u30fc\u30bf\u3092 Google Drive \u3068\u3059\u3050\u306b\u540c\u671f\u3057\u307e\u3059"
+private const val PROMPT_GOOGLE_DRIVE_CONNECT_FAILED = "Google アカウントへの接続に失敗しました"
+private const val PROMPT_GOOGLE_DRIVE_SYNCING = "同期中です"
+private const val PROMPT_GOOGLE_DRIVE_SYNCING_NOTE = "Google Drive と日記データを確認しています"
+private const val PROMPT_GOOGLE_DRIVE_SYNCING_COMPACT = "同期中"
+private const val PROMPT_GOOGLE_DRIVE_SYNCED_COMPACT = "同期済み"
+private const val PROMPT_GOOGLE_DRIVE_SYNC_FAILED_COMPACT = "同期失敗"
+private const val PROMPT_GOOGLE_DRIVE_LOGOUT_SUCCESS = "Google アカウントからログアウトしました"
+private const val PROMPT_GOOGLE_DRIVE_LOGOUT_FAILED = "Google アカウントからのログアウトに失敗しました"
+private const val PROMPT_GOOGLE_DRIVE_RESTORED = "Google Drive と連携しました"
+private const val PROMPT_GOOGLE_DRIVE_MANUAL_SYNCED = "Google Drive と同期しました"
 private const val PROMPT_ONBOARDING_REMINDER = "\u306f\u3058\u3081\u306b\u3001\u6bce\u65e5\u3069\u306e\u6642\u9593\u306b\u65e5\u8a18\u3092\u66f8\u304f\u304b\u6c7a\u3081\u307e\u3057\u3087\u3046"
+private const val PROMPT_ONBOARDING_GOOGLE_DRIVE = "Google Drive\u306b\u30ed\u30b0\u30a4\u30f3\u3059\u308b\u3068\u3001\u8907\u6570\u306e\u7aef\u672b\u9593\u3067\u30c7\u30fc\u30bf\u3092\u5171\u6709\u3067\u304d\u3001\u6a5f\u7a2e\u5909\u66f4\u6642\u3082\u30c7\u30fc\u30bf\u3092\u5f15\u304d\u7d99\u3052\u307e\u3059"
+private const val PROMPT_ONBOARDING_GOOGLE_DRIVE_PERMISSION = "Google Drive \u306e \u30de\u30a4\u30c9\u30e9\u30a4\u30d6/\u307e\u3044\u306b\u3061\u65e5\u8a18 \u306b\u4fdd\u5b58\u3057\u307e\u3059\n\u3053\u306e\u30a2\u30d7\u30ea\u306f\u8a31\u53ef\u3055\u308c\u305f\u3053\u306e\u30d5\u30a9\u30eb\u30c0\u3068\u30a2\u30d7\u30ea\u304c\u4f5c\u6210\u3057\u305f\u30c7\u30fc\u30bf\u4ee5\u5916\u306b\u306f\u30a2\u30af\u30bb\u30b9\u3057\u307e\u305b\u3093"
 private const val PROMPT_ONBOARDING_THEME = "\u6b21\u306b\u30c6\u30fc\u30de\u30ab\u30e9\u30fc\u3092\u9078\u3073\u307e\u3057\u3087\u3046"
 private const val PROMPT_ONBOARDING_FINISH = "\u8a2d\u5b9a\u3067\u304d\u305f\u3089\u3001\u4e0b\u306e\u300c\u306f\u3058\u3081\u308b\u300d\u304b\u3089\u9032\u307f\u307e\u3057\u3087\u3046"
 private val CHAT_TEXT_SIZE = 18.sp
@@ -225,6 +331,28 @@ private enum class BottomSection {
     Calendar,
     Settings
 }
+
+private enum class BackupAction {
+    Export,
+    Restore
+}
+
+private enum class GoogleDriveAction {
+    RestoreFromDrive,
+    UploadDiary,
+    ManualSync
+}
+
+private enum class DiaryMediaKind {
+    Image,
+    Video
+}
+
+private data class FullscreenDiaryMedia(
+    val index: Int,
+    val uri: String,
+    val kind: DiaryMediaKind
+)
 
 private fun diaryRoute(date: LocalDate, edit: Boolean = false): String =
     "$ROUTE_DIARY_PREFIX/$date?$ARG_EDIT=$edit"
@@ -241,7 +369,7 @@ private fun BottomNavigationBar(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
+            .windowInsetsPadding(WindowInsets.navigationBars),
         shape = RectangleShape,
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(1.dp, colorScheme.onSurface.copy(alpha = 0.12f))
@@ -289,27 +417,43 @@ private fun BottomNavigationButton(
     val colorScheme = MaterialTheme.colorScheme
     val contentColor = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.72f)
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (selected) colorScheme.background else Color.Transparent)
+            .background(Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            painter = painterResource(iconRes),
-            contentDescription = label,
-            modifier = Modifier.size(22.dp),
-            tint = contentColor
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge.copy(fontFamily = JetBrainsMsGothicFontFamily),
-            color = contentColor
-        )
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 7.dp)
+                    .width(38.dp)
+                    .height(3.dp)
+                    .clip(InlineShape)
+                    .background(colorScheme.primary.copy(alpha = 0.9f))
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 10.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = label,
+                modifier = Modifier.size(22.dp),
+                tint = contentColor
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge.copy(fontFamily = JetBrainsMsGothicFontFamily),
+                color = contentColor
+            )
+        }
     }
 }
 
@@ -438,9 +582,231 @@ fun DiaryApp(
     val viewModel: DiaryViewModel = viewModel(factory = DiaryViewModel.Factory(application))
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
+    val googleSignInClient = remember(context) {
+        GoogleSignIn.getClient(
+            context,
+            GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestScopes(Scope(Scopes.DRIVE_FILE))
+                .build()
+        )
+    }
+    val googleDriveAuthorizationAvailable = remember(context) {
+        GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+    }
+    var backupStatusMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var isDriveSyncInFlight by rememberSaveable { mutableStateOf(false) }
+    var isDriveRequestInFlight by rememberSaveable { mutableStateOf(false) }
+    var compactDriveStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var compactDriveStatusToken by rememberSaveable { mutableStateOf(0) }
+    var recoverableAuthAccount by remember { mutableStateOf<GoogleSignInAccount?>(null) }
+    var recoverableAuthAction by remember { mutableStateOf<GoogleDriveAction?>(null) }
+    var pendingRecoverableAuthIntent by remember { mutableStateOf<Intent?>(null) }
+    var pendingGoogleDriveAction by remember { mutableStateOf(GoogleDriveAction.RestoreFromDrive) }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { }
+    fun showCompactDriveStatus(text: String, autoHideMillis: Long? = null) {
+        compactDriveStatus = text
+        compactDriveStatusToken += 1
+        val currentToken = compactDriveStatusToken
+        if (autoHideMillis != null) {
+            coroutineScope.launch {
+                delay(autoHideMillis)
+                if (compactDriveStatusToken == currentToken) {
+                    compactDriveStatus = null
+                }
+            }
+        }
+    }
+    fun syncSignedInGoogleAccount(
+        account: GoogleSignInAccount,
+        action: GoogleDriveAction,
+        interactive: Boolean
+    ) {
+        val resolvedAccountLabel = account.email
+            ?: account.displayName
+            ?: LABEL_CONNECTED
+        viewModel.saveBackupAccountLabel(resolvedAccountLabel)
+        val shouldBlockUi = interactive || action == GoogleDriveAction.RestoreFromDrive
+        val shouldShowCompactStatus = action == GoogleDriveAction.UploadDiary && !interactive
+        if (shouldBlockUi) {
+            isDriveSyncInFlight = true
+        }
+        if (shouldShowCompactStatus) {
+            showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNCING_COMPACT)
+        }
+        isDriveRequestInFlight = true
+        coroutineScope.launch {
+            val tokenResult = withContext(Dispatchers.IO) {
+                runCatching {
+                    val androidAccount = checkNotNull(account.account) {
+                        "Google アカウント情報を取得できませんでした"
+                    }
+                    GoogleAuthUtil.getToken(
+                        context,
+                        androidAccount,
+                        "oauth2:${Scopes.DRIVE_FILE} ${Scopes.EMAIL}"
+                    )
+                }
+            }
+            if (tokenResult.isFailure) {
+                val error = tokenResult.exceptionOrNull()
+                if (interactive && error is UserRecoverableAuthException) {
+                    recoverableAuthAccount = account
+                    recoverableAuthAction = action
+                    pendingRecoverableAuthIntent = error.intent
+                    if (pendingRecoverableAuthIntent == null) {
+                        backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+                        isDriveRequestInFlight = false
+                        isDriveSyncInFlight = false
+                        if (shouldShowCompactStatus) {
+                            showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNC_FAILED_COMPACT, 1500)
+                        }
+                    }
+                    return@launch
+                }
+                if (interactive) {
+                    backupStatusMessage = error?.message ?: PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+                }
+                if (shouldShowCompactStatus) {
+                    showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNC_FAILED_COMPACT, 1500)
+                }
+                isDriveRequestInFlight = false
+                isDriveSyncInFlight = false
+                return@launch
+            }
+            val accessToken = tokenResult.getOrThrow()
+            val syncResult = withContext(Dispatchers.IO) {
+                when (action) {
+                    GoogleDriveAction.RestoreFromDrive ->
+                        viewModel.restoreFromGoogleDrive(accessToken, resolvedAccountLabel)
+                    GoogleDriveAction.UploadDiary ->
+                        viewModel.uploadDiaryToGoogleDrive(accessToken, resolvedAccountLabel)
+                    GoogleDriveAction.ManualSync ->
+                        viewModel.manualSyncWithGoogleDrive(accessToken, resolvedAccountLabel)
+                }
+            }
+            val syncMessage = syncResult.fold(
+                onSuccess = {
+                    if (!interactive) {
+                        null
+                    } else {
+                        when (action) {
+                            GoogleDriveAction.RestoreFromDrive -> PROMPT_GOOGLE_DRIVE_RESTORED
+                            GoogleDriveAction.UploadDiary,
+                            GoogleDriveAction.ManualSync -> PROMPT_GOOGLE_DRIVE_MANUAL_SYNCED
+                        }
+                    }
+                },
+                onFailure = {
+                    if (interactive) it.message ?: PROMPT_BACKUP_FAILED else null
+                }
+            )
+            if (interactive) {
+                backupStatusMessage = syncMessage
+            }
+            if (shouldShowCompactStatus) {
+                if (syncResult.isSuccess) {
+                    showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNCED_COMPACT, 1500)
+                } else {
+                    showCompactDriveStatus(PROMPT_GOOGLE_DRIVE_SYNC_FAILED_COMPACT, 1800)
+                }
+            }
+            isDriveRequestInFlight = false
+            if (shouldBlockUi) {
+                isDriveSyncInFlight = false
+            }
+        }
+    }
+    val recoverableAuthLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val account = recoverableAuthAccount
+        val action = recoverableAuthAction ?: GoogleDriveAction.RestoreFromDrive
+        recoverableAuthAccount = null
+        recoverableAuthAction = null
+        pendingRecoverableAuthIntent = null
+        if (result.resultCode != Activity.RESULT_OK || account == null) {
+            backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+            isDriveRequestInFlight = false
+            isDriveSyncInFlight = false
+            return@rememberLauncherForActivityResult
+        }
+        syncSignedInGoogleAccount(account, action = action, interactive = true)
+    }
+    LaunchedEffect(pendingRecoverableAuthIntent) {
+        val intent = pendingRecoverableAuthIntent ?: return@LaunchedEffect
+        recoverableAuthLauncher.launch(intent)
+    }
+    val googleDriveSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+            isDriveSyncInFlight = false
+            return@rememberLauncherForActivityResult
+        }
+        val account = runCatching {
+            GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                .getResult(ApiException::class.java)
+        }.getOrElse {
+            backupStatusMessage = it.message ?: PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+            isDriveRequestInFlight = false
+            isDriveSyncInFlight = false
+            return@rememberLauncherForActivityResult
+        }
+        syncSignedInGoogleAccount(account, action = pendingGoogleDriveAction, interactive = true)
+    }
+    fun runGoogleDriveAction(action: GoogleDriveAction, interactive: Boolean) {
+        if (isDriveRequestInFlight) return
+        if (!googleDriveAuthorizationAvailable) {
+            if (interactive) {
+                backupStatusMessage = PROMPT_GOOGLE_DRIVE_CONNECT_FAILED
+            }
+            return
+        }
+        val existingAccount = GoogleSignIn.getLastSignedInAccount(context)
+        if (existingAccount != null) {
+            syncSignedInGoogleAccount(existingAccount, action = action, interactive = interactive)
+            return
+        }
+        if (!interactive) {
+            return
+        }
+        pendingGoogleDriveAction = action
+        isDriveRequestInFlight = true
+        isDriveSyncInFlight = true
+        googleDriveSignInLauncher.launch(googleSignInClient.signInIntent)
+    }
+    fun maybeRunAutoDiarySync() {
+        if (uiState.googleDriveSyncMode != GoogleDriveSyncMode.AutoOnSave) return
+        if (!uiState.isGoogleDriveLinked) return
+        runGoogleDriveAction(
+            action = GoogleDriveAction.UploadDiary,
+            interactive = false
+        )
+    }
+    fun disconnectGoogleDrive() {
+        if (isDriveRequestInFlight) return
+        isDriveRequestInFlight = true
+        isDriveSyncInFlight = true
+        googleSignInClient.signOut().addOnCompleteListener { task ->
+            recoverableAuthAccount = null
+            recoverableAuthAction = null
+            pendingRecoverableAuthIntent = null
+            pendingGoogleDriveAction = GoogleDriveAction.RestoreFromDrive
+            isDriveRequestInFlight = false
+            isDriveSyncInFlight = false
+            if (task.isSuccessful) {
+                viewModel.disconnectGoogleDrive()
+                backupStatusMessage = PROMPT_GOOGLE_DRIVE_LOGOUT_SUCCESS
+            } else {
+                backupStatusMessage = task.exception?.message ?: PROMPT_GOOGLE_DRIVE_LOGOUT_FAILED
+            }
+        }
+    }
     var hasRequestedNotificationPermissionThisLaunch by rememberSaveable { mutableStateOf(false) }
     val requestNotificationPermission = {
         if (
@@ -486,38 +852,177 @@ fun DiaryApp(
         }
     }
 
-    DiaryappTheme(themePreset = uiState.themePreset) {
+    DiaryappTheme(
+        themePreset = uiState.themePreset,
+        themeIntensity = uiState.themeIntensity
+    ) {
         SystemBarAppearance(useDarkIcons = MaterialTheme.colorScheme.background.luminance() > 0.5f)
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            DiaryNavigation(
-                navController = navController,
-                uiState = uiState,
-                forceShowOnboarding = forceShowOnboarding,
-                onConsumeForceShowOnboarding = onConsumeForceShowOnboarding,
-                onEnsureTodayDraft = viewModel::ensureTodayDraft,
-                onEnsureDraft = viewModel::ensureDraft,
-                onSaveTodayText = viewModel::saveTodayText,
-                onSaveDiaryText = viewModel::saveDiaryText,
-                onSaveTodayPhotos = { uris ->
-                    viewModel.saveTodayPhotos(
-                        context.contentResolver,
-                        uris,
-                        markPhotoStepCompleted = false
-                    )
+            if (!uiState.isLoading && !uiState.isSecurityUnlocked) {
+                AppLockScreen(
+                    isFingerprintEnabled = uiState.fingerprintAuthEnabled,
+                    isPasswordEnabled = uiState.passwordAuthEnabled,
+                    onVerifyPassword = viewModel::verifyPassword,
+                    onUnlock = viewModel::unlockSecurity
+                )
+            } else {
+                DiaryNavigation(
+                    navController = navController,
+                    uiState = uiState,
+                    isDriveSyncInFlight = isDriveSyncInFlight,
+                    forceShowOnboarding = forceShowOnboarding,
+                    onConsumeForceShowOnboarding = onConsumeForceShowOnboarding,
+                    onEnsureTodayDraft = viewModel::ensureTodayDraft,
+                    onEnsureDraft = viewModel::ensureDraft,
+                    onSaveTodayText = viewModel::saveTodayText,
+                    onSaveDiaryText = viewModel::saveDiaryText,
+                    onSaveTodayPhotos = { uris ->
+                        viewModel.saveTodayPhotos(
+                            context.contentResolver,
+                            uris,
+                            markPhotoStepCompleted = false
+                        )
+                    },
+                    onSavePhotos = { date, uris -> viewModel.savePhotos(date, context.contentResolver, uris) },
+                    onCompleteTodayPhotoStep = viewModel::completeTodayPhotoStep,
+                    onRemovePhoto = viewModel::removePhoto,
+                    onMarkTodayNoPhotos = viewModel::markTodayNoPhotos,
+                    onUpdateMonth = viewModel::updateMonth,
+                    onSetThemePreset = viewModel::setThemePreset,
+                    onSetThemeIntensity = viewModel::setThemeIntensity,
+                    onSetNotificationsEnabled = viewModel::setNotificationsEnabled,
+                    onSetGoogleDriveSyncMode = viewModel::setGoogleDriveSyncMode,
+                    onSetFingerprintAuthEnabled = viewModel::setFingerprintAuthEnabled,
+                    onSetPasswordAuthEnabled = viewModel::setPasswordAuthEnabled,
+                    onSavePasswordCredential = viewModel::savePasswordCredential,
+                    onVerifyPassword = viewModel::verifyPassword,
+                    onConnectGoogleDrive = {
+                        runGoogleDriveAction(
+                            action = GoogleDriveAction.RestoreFromDrive,
+                            interactive = true
+                        )
+                    },
+                    onManualGoogleDriveSync = {
+                        runGoogleDriveAction(
+                            action = GoogleDriveAction.ManualSync,
+                            interactive = true
+                        )
+                    },
+                    onAutoSyncDiarySave = ::maybeRunAutoDiarySync,
+                    onDisconnectGoogleDrive = ::disconnectGoogleDrive,
+                    onClearAllData = viewModel::clearAllData,
+                    onOpenReminderTimePicker = openReminderTimePicker,
+                    onRemoveReminderTime = viewModel::removeReminderTime,
+                    onCompleteOnboarding = viewModel::completeOnboarding
+                )
+            }
+        }
+
+        backupStatusMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = { backupStatusMessage = null },
+                confirmButton = {
+                    TextButton(onClick = { backupStatusMessage = null }) {
+                        Text(LABEL_CLOSE)
+                    }
                 },
-                onSavePhotos = { date, uris -> viewModel.savePhotos(date, context.contentResolver, uris) },
-                onCompleteTodayPhotoStep = viewModel::completeTodayPhotoStep,
-                onRemovePhoto = viewModel::removePhoto,
-                onMarkTodayNoPhotos = viewModel::markTodayNoPhotos,
-                onUpdateMonth = viewModel::updateMonth,
-                onSetThemePreset = viewModel::setThemePreset,
-                onOpenReminderTimePicker = openReminderTimePicker,
-                onRemoveReminderTime = viewModel::removeReminderTime,
-                onCompleteOnboarding = viewModel::completeOnboarding
+                text = {
+                    Text(message)
+                }
             )
+        }
+
+        AnimatedVisibility(
+            visible = compactDriveStatus != null,
+            enter = fadeIn(animationSpec = tween(durationMillis = 160)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 220)),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(top = 12.dp, end = 16.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopEnd
+            ) {
+                Surface(
+                    shape = ControlShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 6.dp,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (compactDriveStatus == PROMPT_GOOGLE_DRIVE_SYNCING_COMPACT) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            text = compactDriveStatus.orEmpty(),
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontFamily = JetBrainsMsGothicFontFamily
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        if (isDriveSyncInFlight) {
+            Dialog(
+                onDismissRequest = {},
+                properties = DialogProperties(
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false
+                )
+            ) {
+                Card(
+                    shape = PanelShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = PROMPT_GOOGLE_DRIVE_SYNCING,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontFamily = JetBrainsMsGothicFontFamily
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = PROMPT_GOOGLE_DRIVE_SYNCING_NOTE,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = JetBrainsMsGothicFontFamily
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -537,9 +1042,142 @@ private fun SystemBarAppearance(useDarkIcons: Boolean) {
 }
 
 @Composable
+private fun AppLockScreen(
+    isFingerprintEnabled: Boolean,
+    isPasswordEnabled: Boolean,
+    onVerifyPassword: (String) -> Boolean,
+    onUnlock: () -> Unit
+) {
+    val context = LocalContext.current
+    val activity = context.findComponentActivity()
+    var password by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var hasAutoPrompted by remember { mutableStateOf(false) }
+
+    val launchBiometricAuth = {
+        when {
+            activity == null -> {
+                errorMessage = PROMPT_BIOMETRIC_UNAVAILABLE
+            }
+            biometricAvailabilityMessage(context) != null -> {
+                errorMessage = biometricAvailabilityMessage(context)
+            }
+            else -> {
+                errorMessage = null
+                showBiometricPrompt(
+                    activity = activity,
+                    title = LABEL_UNLOCK,
+                    subtitle = PROMPT_SECURITY_LOCK,
+                    onSuccess = {
+                        errorMessage = null
+                        onUnlock()
+                    },
+                    onError = { promptError ->
+                        errorMessage = promptError.ifBlank { null }
+                    }
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(isFingerprintEnabled) {
+        if (isFingerprintEnabled && !hasAutoPrompted) {
+            hasAutoPrompted = true
+            launchBiometricAuth()
+        }
+    }
+
+    ScreenBackdrop {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = ScreenShape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 22.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = LABEL_DIARY_MENU_TITLE,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontFamily = JetBrainsMsGothicFontFamily
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = PROMPT_SECURITY_LOCK,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                    )
+                    if (isFingerprintEnabled) {
+                        FilledTonalButton(
+                            onClick = launchBiometricAuth,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(LABEL_USE_FINGERPRINT)
+                        }
+                    }
+                    if (isPasswordEnabled) {
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = {
+                                password = it
+                                if (errorMessage == PROMPT_PASSWORD_LOCK_FAILED) {
+                                    errorMessage = null
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text(LABEL_PASSWORD_AUTH) },
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = ImeAction.Done
+                            )
+                        )
+                        Button(
+                            onClick = {
+                                if (onVerifyPassword(password)) {
+                                    errorMessage = null
+                                    password = ""
+                                    onUnlock()
+                                } else {
+                                    errorMessage = PROMPT_PASSWORD_LOCK_FAILED
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = password.isNotBlank()
+                        ) {
+                            Text(LABEL_UNLOCK)
+                        }
+                    }
+                    errorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun DiaryNavigation(
     navController: NavHostController,
     uiState: DiaryUiState,
+    isDriveSyncInFlight: Boolean,
     forceShowOnboarding: Boolean,
     onConsumeForceShowOnboarding: () -> Unit,
     onEnsureTodayDraft: () -> Unit,
@@ -553,6 +1191,18 @@ private fun DiaryNavigation(
     onMarkTodayNoPhotos: () -> Unit,
     onUpdateMonth: (YearMonth) -> Unit,
     onSetThemePreset: (AppThemePreset) -> Unit,
+    onSetThemeIntensity: (Float) -> Unit,
+    onSetNotificationsEnabled: (Boolean) -> Unit,
+    onSetGoogleDriveSyncMode: (GoogleDriveSyncMode) -> Unit,
+    onSetFingerprintAuthEnabled: (Boolean) -> Unit,
+    onSetPasswordAuthEnabled: (Boolean) -> Unit,
+    onSavePasswordCredential: (String) -> Unit,
+    onVerifyPassword: (String) -> Boolean,
+    onConnectGoogleDrive: () -> Unit,
+    onManualGoogleDriveSync: () -> Unit,
+    onAutoSyncDiarySave: () -> Unit,
+    onDisconnectGoogleDrive: () -> Unit,
+    onClearAllData: () -> Unit,
     onOpenReminderTimePicker: () -> Unit,
     onRemoveReminderTime: (LocalTime) -> Unit,
     onCompleteOnboarding: () -> Unit
@@ -664,10 +1314,15 @@ private fun DiaryNavigation(
         composable(ROUTE_ONBOARDING) {
             OnboardingChatScreen(
                 reminderTimes = uiState.reminderTimes,
+                backupAccountEmail = uiState.backupAccountEmail,
                 themePreset = uiState.themePreset,
+                themeIntensity = uiState.themeIntensity,
+                isInteractionLocked = isDriveSyncInFlight,
                 onAddReminderTime = onOpenReminderTimePicker,
                 onRemoveReminderTime = onRemoveReminderTime,
+                onConnectGoogleDrive = onConnectGoogleDrive,
                 onSelectThemePreset = onSetThemePreset,
+                onThemeIntensityChange = onSetThemeIntensity,
                 onFinish = finishOnboarding
             )
         }
@@ -685,10 +1340,12 @@ private fun DiaryNavigation(
                 },
                 onCompletePhotos = {
                     onCompleteTodayPhotoStep()
+                    onAutoSyncDiarySave()
                     finishTodayChat()
                 },
                 onNoPhotos = {
                     onMarkTodayNoPhotos()
+                    onAutoSyncDiarySave()
                     finishTodayChat()
                 }
             )
@@ -721,8 +1378,25 @@ private fun DiaryNavigation(
             SettingsScreen(
                 themePreset = uiState.themePreset,
                 reminderTimes = uiState.reminderTimes,
+                notificationsEnabled = uiState.notificationsEnabled,
+                fingerprintAuthEnabled = uiState.fingerprintAuthEnabled,
+                passwordAuthEnabled = uiState.passwordAuthEnabled,
+                hasPasswordCredential = uiState.hasPasswordCredential,
+                backupAccountEmail = uiState.backupAccountEmail,
+                isGoogleDriveLinked = uiState.isGoogleDriveLinked,
+                googleDriveSyncMode = uiState.googleDriveSyncMode,
                 onOpenThemeSelection = openThemePicker,
                 onOpenReminderSettings = openReminderSettings,
+                onSetNotificationsEnabled = onSetNotificationsEnabled,
+                onSetGoogleDriveSyncMode = onSetGoogleDriveSyncMode,
+                onSetFingerprintAuthEnabled = onSetFingerprintAuthEnabled,
+                onSetPasswordAuthEnabled = onSetPasswordAuthEnabled,
+                onSavePasswordCredential = onSavePasswordCredential,
+                onVerifyPassword = onVerifyPassword,
+                onConnectGoogleDrive = onConnectGoogleDrive,
+                onManualGoogleDriveSync = onManualGoogleDriveSync,
+                onDisconnectGoogleDrive = onDisconnectGoogleDrive,
+                onClearAllData = onClearAllData,
                 onOpenDiaryMenu = openDiaryMenu,
                 onOpenCalendar = openCalendar,
                 onOpenSettings = openSettings
@@ -742,7 +1416,9 @@ private fun DiaryNavigation(
         composable(ROUTE_THEME_PICKER) {
             ThemeSelectionScreen(
                 selectedThemePreset = uiState.themePreset,
+                themeIntensity = uiState.themeIntensity,
                 onSelectThemePreset = onSetThemePreset,
+                onThemeIntensityChange = onSetThemeIntensity,
                 onBack = { navController.popBackStack() },
                 onOpenDiaryMenu = openDiaryMenu,
                 onOpenCalendar = openCalendar,
@@ -767,7 +1443,10 @@ private fun DiaryNavigation(
                 onBack = { navController.popBackStack() },
                 startInEditMode = startInEditMode,
                 onEnsureDraft = onEnsureDraft,
-                onSaveText = onSaveDiaryText,
+                onSaveText = { currentDate, text ->
+                    onSaveDiaryText(currentDate, text)
+                    onAutoSyncDiarySave()
+                },
                 onSavePhotos = onSavePhotos,
                 onRemovePhoto = onRemovePhoto,
                 onOpenDiaryMenu = openDiaryMenu,
@@ -781,23 +1460,33 @@ private fun DiaryNavigation(
 @Composable
 private fun OnboardingChatScreen(
     reminderTimes: List<LocalTime>,
+    backupAccountEmail: String?,
     themePreset: AppThemePreset,
+    themeIntensity: Float,
+    isInteractionLocked: Boolean,
     onAddReminderTime: () -> Unit,
     onRemoveReminderTime: (LocalTime) -> Unit,
+    onConnectGoogleDrive: () -> Unit,
     onSelectThemePreset: (AppThemePreset) -> Unit,
+    onThemeIntensityChange: (Float) -> Unit,
     onFinish: () -> Unit
 ) {
     val today = LocalDate.now()
     val listState = rememberLazyListState()
     var hasSkippedReminderSelection by rememberSaveable { mutableStateOf(false) }
-    val hasAdvancedToThemeStep = reminderTimes.isNotEmpty() || hasSkippedReminderSelection
+    var hasChosenGoogleDriveOption by rememberSaveable { mutableStateOf(false) }
+    val hasAdvancedToDriveStep = reminderTimes.isNotEmpty() || hasSkippedReminderSelection
+    val hasAdvancedToThemeStep = hasAdvancedToDriveStep && hasChosenGoogleDriveOption
     var showReminderIntro by rememberSaveable { mutableStateOf(false) }
     var showReminderNote by rememberSaveable { mutableStateOf(false) }
+    var showGoogleDriveIntro by rememberSaveable { mutableStateOf(false) }
+    var showGoogleDriveNote by rememberSaveable { mutableStateOf(false) }
     var showThemeIntro by rememberSaveable { mutableStateOf(false) }
     var showThemeNote by rememberSaveable { mutableStateOf(false) }
     var showFinishPrompt by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isInteractionLocked) {
+        if (isInteractionLocked) return@LaunchedEffect
         if (!showReminderIntro) {
             kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
             showReminderIntro = true
@@ -808,8 +1497,18 @@ private fun OnboardingChatScreen(
         }
     }
 
-    LaunchedEffect(hasAdvancedToThemeStep, showReminderNote) {
-        if (!hasAdvancedToThemeStep || !showReminderNote || showThemeIntro) return@LaunchedEffect
+    LaunchedEffect(hasAdvancedToDriveStep, showReminderNote, isInteractionLocked) {
+        if (isInteractionLocked) return@LaunchedEffect
+        if (!hasAdvancedToDriveStep || !showReminderNote || showGoogleDriveIntro) return@LaunchedEffect
+        kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+        showGoogleDriveIntro = true
+        kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
+        showGoogleDriveNote = true
+    }
+
+    LaunchedEffect(hasAdvancedToThemeStep, showGoogleDriveNote, isInteractionLocked) {
+        if (isInteractionLocked) return@LaunchedEffect
+        if (!hasAdvancedToThemeStep || !showGoogleDriveNote || showThemeIntro) return@LaunchedEffect
         kotlinx.coroutines.delay(ONBOARDING_THEME_TRANSITION_DELAY_MS)
         showThemeIntro = true
         kotlinx.coroutines.delay(ONBOARDING_MESSAGE_DELAY_MS)
@@ -821,6 +1520,8 @@ private fun OnboardingChatScreen(
     val visibleOnboardingItemCount by remember(
         showReminderIntro,
         showReminderNote,
+        showGoogleDriveIntro,
+        showGoogleDriveNote,
         showThemeIntro,
         showThemeNote,
         showFinishPrompt
@@ -829,6 +1530,8 @@ private fun OnboardingChatScreen(
             var count = 0
             if (showReminderIntro) count += 1
             if (showReminderNote) count += 2
+            if (showGoogleDriveIntro) count += 1
+            if (showGoogleDriveNote) count += 2
             if (showThemeIntro) count += 1
             if (showThemeNote) count += 1
             if (showFinishPrompt) count += 1
@@ -860,7 +1563,7 @@ private fun OnboardingChatScreen(
                         AnimatedChatContent(animationKey = "onboarding_start_button") {
                             Button(
                                 onClick = onFinish,
-                                shape = RoundedCornerShape(18.dp)
+                                shape = ControlShape
                             ) {
                                 Text(LABEL_START)
                             }
@@ -917,6 +1620,36 @@ private fun OnboardingChatScreen(
                         }
                     }
                 }
+                if (showGoogleDriveIntro) {
+                    item(key = "onboarding_google_drive_intro") {
+                        MessageBubble(
+                            text = PROMPT_ONBOARDING_GOOGLE_DRIVE,
+                            isBot = true,
+                            animationKey = "onboarding_google_drive_intro"
+                        )
+                    }
+                }
+                if (showGoogleDriveNote) {
+                    item(key = "onboarding_google_drive_note") {
+                        MessageBubble(
+                            text = PROMPT_ONBOARDING_GOOGLE_DRIVE_PERMISSION,
+                            isBot = true,
+                            animationKey = "onboarding_google_drive_note"
+                        )
+                    }
+                    item(key = "onboarding_google_drive_card") {
+                        AnimatedChatContent(animationKey = "onboarding_google_drive_card") {
+                            OnboardingGoogleDriveCard(
+                                backupAccountEmail = backupAccountEmail,
+                                onConnect = {
+                                    hasChosenGoogleDriveOption = true
+                                    onConnectGoogleDrive()
+                                },
+                                onSkip = { hasChosenGoogleDriveOption = true }
+                            )
+                        }
+                    }
+                }
                 if (showThemeIntro) {
                     item(key = "onboarding_theme_intro") {
                         MessageBubble(
@@ -931,7 +1664,9 @@ private fun OnboardingChatScreen(
                         AnimatedChatContent(animationKey = "onboarding_theme_card") {
                             ThemeSelectionInlineCard(
                                 selectedThemePreset = themePreset,
-                                onSelectThemePreset = onSelectThemePreset
+                                themeIntensity = themeIntensity,
+                                onSelectThemePreset = onSelectThemePreset,
+                                onThemeIntensityChange = onThemeIntensityChange
                             )
                         }
                     }
@@ -993,7 +1728,7 @@ private fun ChatScreen(
                     hasPhotos = entry.photoUris.isNotEmpty(),
                     onPickPhotos = {
                         photoPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                         )
                     },
                     onFinishPhotos = onCompletePhotos,
@@ -1110,12 +1845,12 @@ private fun ChatComposerBar(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 36.dp)
-                            .clip(RoundedCornerShape(18.dp))
+                            .clip(ControlShape)
                             .background(MaterialTheme.colorScheme.background)
                             .border(
                                 width = 1.dp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(18.dp)
+                                shape = ControlShape
                             )
                             .padding(horizontal = 12.dp, vertical = 7.dp),
                         contentAlignment = Alignment.CenterStart
@@ -1140,7 +1875,7 @@ private fun ChatComposerBar(
                 onClick = onSend,
                 enabled = canSend,
                 modifier = Modifier.size(36.dp),
-                shape = CircleShape,
+                shape = ControlShape,
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Icon(
@@ -1174,14 +1909,14 @@ private fun PhotoActionBar(
             FilledTonalButton(
                 onClick = onPickPhotos,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(18.dp)
+                shape = ControlShape
             ) {
-                Text(if (hasPhotos) LABEL_ADD_PHOTO else LABEL_PICK_PHOTO)
+                Text(if (hasPhotos) LABEL_ADD_MEDIA else LABEL_PICK_MEDIA)
             }
             OutlinedButton(
                 onClick = if (hasPhotos) onFinishPhotos else onNoPhotos,
                 modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(18.dp)
+                shape = ControlShape
             ) {
                 Text(if (hasPhotos) LABEL_FINISH else LABEL_NO_PHOTO)
             }
@@ -1295,7 +2030,7 @@ private fun CalendarScreen(
             Button(
                 onClick = { selectedDate?.let(onOpenDate) },
                 enabled = selectedDate != null,
-                shape = RoundedCornerShape(20.dp)
+                shape = ControlShape
             ) {
                 Text(LABEL_VIEW)
             }
@@ -1305,7 +2040,7 @@ private fun CalendarScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1323,7 +2058,7 @@ private fun CalendarScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Card(
-                shape = RoundedCornerShape(28.dp),
+                shape = ScreenShape,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -1335,12 +2070,12 @@ private fun CalendarScreen(
                         TextButton(onClick = onPreviousMonth) { Text(LABEL_PREVIOUS_MONTH) }
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(ControlShape)
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
                                 .border(
                                     width = 1.dp,
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                    shape = RoundedCornerShape(16.dp)
+                                    shape = ControlShape
                                 )
                                 .clickable { isMonthPickerVisible = true }
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -1474,7 +2209,7 @@ private fun CalendarMonthPickerDialog(
                             FilledTonalButton(
                                 onClick = { onSelectMonth(YearMonth.of(selectedYear, month)) },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = ControlShape,
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = if (isSelected) {
                                         MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
@@ -1548,7 +2283,7 @@ private fun DiaryMenuScreen(
 
             if (completedEntries.isEmpty()) {
                 Card(
-                    shape = RoundedCornerShape(24.dp),
+                    shape = PanelShape,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Text(
@@ -1566,8 +2301,7 @@ private fun DiaryMenuScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 12.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         monthSections.forEach { section ->
                             stickyHeader(key = "diary-month-${section.month}") {
@@ -1659,7 +2393,7 @@ private fun DiaryMenuMonthHeader(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = ControlShape,
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 2.dp,
         border = BorderStroke(
@@ -1684,12 +2418,13 @@ private fun DiaryMenuEntryCard(
     onClick: () -> Unit
 ) {
     val previewPhoto = entry.photoUris.firstOrNull()
+    val context = LocalContext.current
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp),
+        shape = PanelShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
@@ -1717,14 +2452,28 @@ private fun DiaryMenuEntryCard(
                 )
             }
             if (previewPhoto != null) {
-                AsyncImage(
-                    model = previewPhoto,
-                    contentDescription = "\u65e5\u8a18\u30d7\u30ec\u30d3\u30e5\u30fc",
+                val previewMediaKind = rememberDiaryMediaKind(previewPhoto)
+                Box(
                     modifier = Modifier
                         .size(width = 88.dp, height = 88.dp)
-                        .clip(RoundedCornerShape(16.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                        .clip(ControlShape)
+                ) {
+                    AsyncImage(
+                        model = rememberMediaModel(
+                            context = context,
+                            uriString = previewPhoto,
+                            mediaKind = previewMediaKind
+                        ),
+                        contentDescription = "\u65e5\u8a18\u30d7\u30ec\u30d3\u30e5\u30fc",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    if (previewMediaKind == DiaryMediaKind.Video) {
+                        VideoBadge(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
             }
         }
     }
@@ -1882,7 +2631,7 @@ private fun DiaryMenuJumpRail(
             Canvas(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 10.dp)
+                    .offset(x = 28.dp)
                     .offset {
                         IntOffset(
                             x = 0,
@@ -1951,12 +2700,83 @@ private fun DiaryMenuJumpRail(
 private fun SettingsScreen(
     themePreset: AppThemePreset,
     reminderTimes: List<LocalTime>,
+    notificationsEnabled: Boolean,
+    fingerprintAuthEnabled: Boolean,
+    passwordAuthEnabled: Boolean,
+    hasPasswordCredential: Boolean,
+    backupAccountEmail: String?,
+    isGoogleDriveLinked: Boolean,
+    googleDriveSyncMode: GoogleDriveSyncMode,
     onOpenThemeSelection: () -> Unit,
     onOpenReminderSettings: () -> Unit,
+    onSetNotificationsEnabled: (Boolean) -> Unit,
+    onSetGoogleDriveSyncMode: (GoogleDriveSyncMode) -> Unit,
+    onSetFingerprintAuthEnabled: (Boolean) -> Unit,
+    onSetPasswordAuthEnabled: (Boolean) -> Unit,
+    onSavePasswordCredential: (String) -> Unit,
+    onVerifyPassword: (String) -> Boolean,
+    onConnectGoogleDrive: () -> Unit,
+    onManualGoogleDriveSync: () -> Unit,
+    onDisconnectGoogleDrive: () -> Unit,
+    onClearAllData: () -> Unit,
     onOpenDiaryMenu: () -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = context.findComponentActivity()
+    val scrollState = rememberScrollState()
+    val colorScheme = MaterialTheme.colorScheme
+    val hasGoogleDriveSession = isGoogleDriveLinked || !backupAccountEmail.isNullOrBlank()
+    var legalDialogTitle by rememberSaveable { mutableStateOf<String?>(null) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var securityDialogMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var passwordDialogMode by remember { mutableStateOf<PasswordDialogMode?>(null) }
+    var showSyncModeDialog by rememberSaveable { mutableStateOf(false) }
+
+    val openPasswordSetup = {
+        passwordDialogMode = if (hasPasswordCredential) {
+            PasswordDialogMode.Change
+        } else {
+            PasswordDialogMode.CreateAndEnable
+        }
+    }
+
+    val handleFingerprintToggle: (Boolean) -> Unit = { enabled ->
+        if (!enabled) {
+            onSetFingerprintAuthEnabled(false)
+        } else {
+            val availabilityMessage = biometricAvailabilityMessage(context)
+            when {
+                activity == null -> securityDialogMessage = PROMPT_BIOMETRIC_UNAVAILABLE
+                availabilityMessage != null -> securityDialogMessage = availabilityMessage
+                else -> {
+                    showBiometricPrompt(
+                        activity = activity,
+                        title = LABEL_FINGERPRINT_AUTH,
+                        subtitle = PROMPT_SECURITY_LOCK,
+                        onSuccess = { onSetFingerprintAuthEnabled(true) },
+                        onError = { message ->
+                            if (message.isNotBlank()) {
+                                securityDialogMessage = message
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    val handlePasswordToggle: (Boolean) -> Unit = { enabled ->
+        if (!enabled) {
+            onSetPasswordAuthEnabled(false)
+        } else if (hasPasswordCredential) {
+            onSetPasswordAuthEnabled(true)
+        } else {
+            passwordDialogMode = PasswordDialogMode.CreateAndEnable
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -1973,7 +2793,9 @@ private fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = LABEL_SETTINGS_TITLE,
@@ -1981,22 +2803,336 @@ private fun SettingsScreen(
                     fontFamily = JetBrainsMsGothicFontFamily
                 )
             )
-            Spacer(modifier = Modifier.height(14.dp))
-            SettingsItemRow(
-                title = LABEL_NOTIFICATION_TIME,
-                supportingText = PROMPT_NOTIFICATION_SETTINGS_NOTE,
-                value = formatReminderSummary(reminderTimes),
-                onClick = onOpenReminderSettings
+
+            SettingsSection(
+                title = LABEL_SETTINGS_SECTION_NOTIFICATION_THEME
+            ) {
+                SettingsActionRow(
+                    title = LABEL_NOTIFICATION_TIME,
+                    supportingText = PROMPT_NOTIFICATION_SETTINGS_NOTE,
+                    trailingText = formatReminderSummary(reminderTimes),
+                    onClick = onOpenReminderSettings
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsSwitchRow(
+                    title = LABEL_NOTIFICATION_TOGGLE,
+                    checked = notificationsEnabled,
+                    onCheckedChange = onSetNotificationsEnabled
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsActionRow(
+                    title = LABEL_THEME,
+                    supportingText = PROMPT_THEME_SETTINGS_NOTE,
+                    trailingText = themePreset.label,
+                    onClick = onOpenThemeSelection
+                )
+            }
+
+            SettingsSection(
+                title = LABEL_SETTINGS_SECTION_IMPORTANT
+            ) {
+                SettingsActionRow(
+                    title = LABEL_DELETE_ALL_DATA,
+                    titleColor = colorScheme.error,
+                    onClick = { showDeleteDialog = true }
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsActionRow(
+                    title = LABEL_TERMS_OF_USE,
+                    onClick = { legalDialogTitle = LABEL_TERMS_OF_USE }
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsActionRow(
+                    title = LABEL_PRIVACY_POLICY,
+                    onClick = { legalDialogTitle = LABEL_PRIVACY_POLICY }
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsActionRow(
+                    title = LABEL_COMMERCIAL_DISCLOSURE,
+                    onClick = { legalDialogTitle = LABEL_COMMERCIAL_DISCLOSURE }
+                )
+            }
+
+            SettingsSection(
+                title = LABEL_SETTINGS_SECTION_SECURITY
+            ) {
+                SettingsSwitchRow(
+                    title = LABEL_FINGERPRINT_AUTH,
+                    checked = fingerprintAuthEnabled,
+                    onCheckedChange = handleFingerprintToggle
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsSwitchRow(
+                    title = LABEL_PASSWORD_AUTH,
+                    supportingText = PROMPT_PASSWORD_ROW_NOTE,
+                    checked = passwordAuthEnabled,
+                    onCheckedChange = handlePasswordToggle,
+                    onClick = openPasswordSetup
+                )
+            }
+
+            SettingsSection(
+                title = LABEL_SETTINGS_SECTION_BACKUP
+            ) {
+                SettingsActionRow(
+                    title = LABEL_GOOGLE_ACCOUNT,
+                    supportingText = PROMPT_BACKUP_DIRECTORY_NOTE,
+                    trailingText = backupAccountEmail ?: if (isGoogleDriveLinked) LABEL_CONNECTED else LABEL_UNSET,
+                    onClick = onConnectGoogleDrive
+                )
+                HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                SettingsActionRow(
+                    title = LABEL_SYNC_METHOD,
+                    supportingText = PROMPT_SYNC_METHOD_NOTE,
+                    trailingText = googleDriveSyncMode.label,
+                    onClick = { showSyncModeDialog = true }
+                )
+                if (hasGoogleDriveSession) {
+                    HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                    SettingsActionRow(
+                        title = LABEL_SYNC_NOW,
+                        supportingText = PROMPT_SYNC_NOW_NOTE,
+                        onClick = onManualGoogleDriveSync
+                    )
+                    HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+                    SettingsActionRow(
+                        title = LABEL_LOGOUT,
+                        onClick = onDisconnectGoogleDrive
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = LABEL_SETTING_VERSION,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.onSurface.copy(alpha = 0.52f),
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            SettingsItemRow(
-                title = LABEL_THEME,
-                supportingText = PROMPT_THEME_SETTINGS_NOTE,
-                value = themePreset.label,
-                onClick = onOpenThemeSelection
-            )
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
+
+    passwordDialogMode?.let { mode ->
+        PasswordSetupDialog(
+            title = if (mode == PasswordDialogMode.Change) LABEL_CHANGE_PASSWORD else LABEL_SET_PASSWORD,
+            requireCurrentPassword = mode == PasswordDialogMode.Change,
+            onDismiss = { passwordDialogMode = null },
+            onConfirm = { currentPassword, newPassword ->
+                if (mode == PasswordDialogMode.Change && !onVerifyPassword(currentPassword)) {
+                    PROMPT_PASSWORD_INCORRECT
+                } else {
+                    onSavePasswordCredential(newPassword)
+                    if (mode == PasswordDialogMode.CreateAndEnable || passwordAuthEnabled) {
+                        onSetPasswordAuthEnabled(true)
+                    }
+                    passwordDialogMode = null
+                    null
+                }
+            }
+        )
+    }
+
+    legalDialogTitle?.let { title ->
+        AlertDialog(
+            onDismissRequest = { legalDialogTitle = null },
+            confirmButton = {
+                TextButton(onClick = { legalDialogTitle = null }) {
+                    Text(LABEL_CLOSE)
+                }
+            },
+            title = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = JetBrainsMsGothicFontFamily
+                    )
+                )
+            },
+            text = {
+                Text(PROMPT_LEGAL_PREPARING)
+            }
+        )
+    }
+
+    securityDialogMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { securityDialogMessage = null },
+            confirmButton = {
+                TextButton(onClick = { securityDialogMessage = null }) {
+                    Text(LABEL_CLOSE)
+                }
+            },
+            text = {
+                Text(message)
+            }
+        )
+    }
+
+    if (showSyncModeDialog) {
+        SyncModeSelectionDialog(
+            selectedMode = googleDriveSyncMode,
+            onSelectMode = {
+                onSetGoogleDriveSyncMode(it)
+                showSyncModeDialog = false
+            },
+            onDismiss = { showSyncModeDialog = false }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        onClearAllData()
+                    }
+                ) {
+                    Text(
+                        text = LABEL_DELETE,
+                        color = colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text(LABEL_CANCEL)
+                }
+            },
+            title = {
+                Text(
+                    text = LABEL_DELETE_ALL_DATA,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = JetBrainsMsGothicFontFamily
+                    ),
+                    color = colorScheme.error
+                )
+            },
+            text = {
+                Text(PROMPT_DELETE_ALL_DATA)
+            }
+        )
+    }
+}
+
+private enum class PasswordDialogMode {
+    CreateAndEnable,
+    Change
+}
+
+@Composable
+private fun PasswordSetupDialog(
+    title: String,
+    requireCurrentPassword: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (currentPassword: String, newPassword: String) -> String?
+) {
+    var currentPassword by rememberSaveable { mutableStateOf("") }
+    var newPassword by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    when {
+                        newPassword.length < 4 -> errorMessage = PROMPT_PASSWORD_MINIMUM
+                        newPassword != confirmPassword -> errorMessage = PROMPT_PASSWORD_MISMATCH
+                        else -> {
+                            val result = onConfirm(currentPassword, newPassword)
+                            if (result == null) {
+                                onDismiss()
+                            } else {
+                                errorMessage = result
+                            }
+                        }
+                    }
+                }
+            ) {
+                Text(LABEL_SAVE)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(LABEL_CANCEL)
+            }
+        },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                )
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (requireCurrentPassword) {
+                    OutlinedTextField(
+                        value = currentPassword,
+                        onValueChange = {
+                            currentPassword = it
+                            errorMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text(LABEL_CURRENT_PASSWORD) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Next
+                        )
+                    )
+                }
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = {
+                        newPassword = it
+                        errorMessage = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(LABEL_NEW_PASSWORD) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Next
+                    )
+                )
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = {
+                        confirmPassword = it
+                        errorMessage = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(LABEL_CONFIRM_PASSWORD) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    )
+                )
+                errorMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -2011,7 +3147,7 @@ private fun OnboardingReminderCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = PanelShape,
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
@@ -2058,6 +3194,59 @@ private fun OnboardingReminderCard(
     }
 }
 
+@Composable
+private fun OnboardingGoogleDriveCard(
+    backupAccountEmail: String?,
+    onConnect: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        border = BorderStroke(
+            width = 1.dp,
+            color = colorScheme.onSurface.copy(alpha = 0.12f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (!backupAccountEmail.isNullOrBlank()) {
+                Text(
+                    text = backupAccountEmail,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = JetBrainsMsGothicFontFamily
+                    ),
+                    color = colorScheme.primary
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onConnect,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(LABEL_LOGIN_WITH_GOOGLE)
+                }
+                OutlinedButton(
+                    onClick = onSkip,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(LABEL_LATER)
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReminderTimesCard(
@@ -2069,7 +3258,7 @@ private fun ReminderTimesCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = PanelShape,
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
@@ -2141,9 +3330,9 @@ private fun ReminderTimeChip(
 
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(ControlShape)
             .background(colorScheme.primary.copy(alpha = 0.12f))
-            .border(1.dp, colorScheme.primary.copy(alpha = 0.22f), RoundedCornerShape(999.dp))
+            .border(1.dp, colorScheme.primary.copy(alpha = 0.22f), ControlShape)
             .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2168,7 +3357,9 @@ private fun ReminderTimeChip(
 @Composable
 private fun ThemeSelectionInlineCard(
     selectedThemePreset: AppThemePreset,
-    onSelectThemePreset: (AppThemePreset) -> Unit
+    themeIntensity: Float,
+    onSelectThemePreset: (AppThemePreset) -> Unit,
+    onThemeIntensityChange: (Float) -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val inlineThemeOrder = listOf(
@@ -2186,7 +3377,7 @@ private fun ThemeSelectionInlineCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = PanelShape,
         colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
@@ -2197,15 +3388,21 @@ private fun ThemeSelectionInlineCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             inlineThemeOrder.forEach { theme ->
                 ThemeInlineChip(
                     themePreset = theme,
+                    themeIntensity = themeIntensity,
                     isSelected = theme == selectedThemePreset,
                     onClick = { onSelectThemePreset(theme) }
                 )
             }
+            HorizontalDivider(color = colorScheme.onSurface.copy(alpha = 0.08f))
+            ThemeIntensityControl(
+                themeIntensity = themeIntensity,
+                onThemeIntensityChange = onThemeIntensityChange
+            )
         }
     }
 }
@@ -2213,17 +3410,18 @@ private fun ThemeSelectionInlineCard(
 @Composable
 private fun ThemeInlineChip(
     themePreset: AppThemePreset,
+    themeIntensity: Float,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val previewColors = paletteForTheme(themePreset).previewColors
+    val previewColors = paletteForTheme(themePreset, themeIntensity).previewColors
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(ControlShape)
             .background(
                 if (isSelected) colorScheme.primary.copy(alpha = 0.12f)
                 else colorScheme.background
@@ -2231,7 +3429,7 @@ private fun ThemeInlineChip(
             .border(
                 width = 1.dp,
                 color = if (isSelected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(16.dp)
+                shape = ControlShape
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -2254,70 +3452,135 @@ private fun ThemeInlineChip(
 }
 
 @Composable
-private fun SettingsItemRow(
+private fun SettingsSection(
     title: String,
-    supportingText: String,
-    value: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontFamily = JetBrainsMsGothicFontFamily
+            ),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = PanelShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                content = content
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    title: String,
+    supportingText: String? = null,
+    trailingText: String? = null,
+    titleColor: Color = Color.Unspecified,
     onClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val resolvedTitleColor = if (titleColor == Color.Unspecified) colorScheme.onSurface else titleColor
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
-        border = BorderStroke(
-            width = 1.dp,
-            color = colorScheme.onSurface.copy(alpha = 0.12f)
-        )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontFamily = JetBrainsMsGothicFontFamily
-                        ),
-                        color = colorScheme.onSurface
-                    )
-                    Text(
-                        text = supportingText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = value,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontFamily = JetBrainsMsGothicFontFamily
-                        ),
-                        color = colorScheme.primary
-                    )
-                    Text(
-                        text = LABEL_CHANGE,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurface.copy(alpha = 0.56f)
-                    )
-                }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = resolvedTitleColor
+            )
+            if (supportingText != null) {
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurface.copy(alpha = 0.66f)
+                )
             }
         }
+        if (trailingText != null) {
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = trailingText,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.primary,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    supportingText: String? = null,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    onClick: (() -> Unit)? = null
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick)
+                else Modifier
+            )
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.onSurface
+            )
+            if (supportingText != null) {
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurface.copy(alpha = 0.66f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }
 
@@ -2378,7 +3641,9 @@ private fun ReminderSelectionScreen(
 @Composable
 private fun ThemeSelectionScreen(
     selectedThemePreset: AppThemePreset,
+    themeIntensity: Float,
     onSelectThemePreset: (AppThemePreset) -> Unit,
+    onThemeIntensityChange: (Float) -> Unit,
     onBack: () -> Unit,
     onOpenDiaryMenu: () -> Unit,
     onOpenCalendar: () -> Unit,
@@ -2420,10 +3685,17 @@ private fun ThemeSelectionScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item(key = "theme_intensity_control") {
+                    ThemeIntensityCard(
+                        themeIntensity = themeIntensity,
+                        onThemeIntensityChange = onThemeIntensityChange
+                    )
+                }
                 items(AppThemePreset.entries.size) { index ->
                     val themePreset = AppThemePreset.entries[index]
                     ThemePresetCard(
                         themePreset = themePreset,
+                        themeIntensity = themeIntensity,
                         isSelected = themePreset == selectedThemePreset,
                         onClick = { onSelectThemePreset(themePreset) }
                     )
@@ -2436,17 +3708,18 @@ private fun ThemeSelectionScreen(
 @Composable
 private fun ThemePresetCard(
     themePreset: AppThemePreset,
+    themeIntensity: Float,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val previewColors = paletteForTheme(themePreset).previewColors
+    val previewColors = paletteForTheme(themePreset, themeIntensity).previewColors
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(22.dp),
+        shape = PanelShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
                 colorScheme.primary.copy(alpha = 0.12f)
@@ -2488,6 +3761,87 @@ private fun ThemePresetCard(
 }
 
 @Composable
+private fun ThemeIntensityCard(
+    themeIntensity: Float,
+    onThemeIntensityChange: (Float) -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = PanelShape,
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+        border = BorderStroke(
+            width = 1.dp,
+            color = colorScheme.onSurface.copy(alpha = 0.12f)
+        )
+    ) {
+        ThemeIntensityControl(
+            themeIntensity = themeIntensity,
+            onThemeIntensityChange = onThemeIntensityChange,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+        )
+    }
+}
+
+@Composable
+private fun ThemeIntensityControl(
+    themeIntensity: Float,
+    onThemeIntensityChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val normalizedIntensity = themeIntensity.coerceIn(0f, 1f)
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = LABEL_THEME_INTENSITY,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.onSurface
+            )
+            Text(
+                text = "${(normalizedIntensity * 100).roundToInt()}%",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.primary
+            )
+        }
+        Slider(
+            value = normalizedIntensity,
+            onValueChange = onThemeIntensityChange,
+            valueRange = 0f..1f
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = LABEL_THEME_INTENSITY_SOFT,
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.onSurface.copy(alpha = 0.62f)
+            )
+            Text(
+                text = LABEL_THEME_INTENSITY_STRONG,
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.onSurface.copy(alpha = 0.62f)
+            )
+        }
+    }
+}
+
+@Composable
 private fun ThemePreviewRow(previewColors: List<Color>) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         previewColors.forEach { previewColor ->
@@ -2500,6 +3854,82 @@ private fun ThemePreviewRow(previewColors: List<Color>) {
             )
         }
     }
+}
+
+private fun Context.findComponentActivity(): FragmentActivity? {
+    var currentContext: Context? = this
+    while (currentContext is ContextWrapper) {
+        if (currentContext is FragmentActivity) {
+            return currentContext
+        }
+        currentContext = currentContext.baseContext
+    }
+    return currentContext as? FragmentActivity
+}
+
+private fun biometricAvailabilityMessage(context: Context): String? =
+    when (
+        BiometricManager.from(context).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        )
+    ) {
+        BiometricManager.BIOMETRIC_SUCCESS -> null
+        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> PROMPT_BIOMETRIC_NOT_ENROLLED
+        BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> PROMPT_BIOMETRIC_TEMPORARY_ERROR
+        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> PROMPT_BIOMETRIC_UNAVAILABLE
+        else -> PROMPT_BIOMETRIC_UNAVAILABLE
+    }
+
+private fun showBiometricPrompt(
+    activity: FragmentActivity,
+    title: String,
+    subtitle: String,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val prompt = BiometricPrompt(
+        activity,
+        ContextCompat.getMainExecutor(activity),
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onSuccess()
+            }
+
+            override fun onAuthenticationFailed() {
+                onError(PROMPT_BIOMETRIC_FAILED)
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (
+                    errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                    errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
+                    errorCode == BiometricPrompt.ERROR_CANCELED
+                ) {
+                    onError("")
+                    return
+                }
+                onError(
+                    when (errorCode) {
+                        BiometricPrompt.ERROR_HW_UNAVAILABLE -> PROMPT_BIOMETRIC_TEMPORARY_ERROR
+                        BiometricPrompt.ERROR_NO_BIOMETRICS,
+                        BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL -> PROMPT_BIOMETRIC_NOT_ENROLLED
+                        else -> errString.toString()
+                    }
+                )
+            }
+        }
+    )
+    prompt.authenticate(
+        BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            .build()
+    )
 }
 
 private fun formatReminderTime(time: LocalTime): String =
@@ -2645,11 +4075,11 @@ private fun DiaryScreen(
                         FilledTonalButton(
                             onClick = {
                                 photoPicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                                 )
                             }
                         ) {
-                            Text(LABEL_ADD_PHOTO)
+                            Text(LABEL_ADD_MEDIA)
                         }
                         FilledTonalButton(
                             onClick = {
@@ -2780,13 +4210,21 @@ private fun PhotoColumn(
     isEditing: Boolean,
     onRemovePhoto: (String) -> Unit
 ) {
-    var fullscreenPhotoUri by remember(photoUris) { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    var fullscreenMedia by remember(photoUris) { mutableStateOf<FullscreenDiaryMedia?>(null) }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        photoUris.forEach { uri ->
-            val painter = rememberAsyncImagePainter(model = uri)
+        photoUris.forEachIndexed { index, uri ->
+            val mediaKind = rememberDiaryMediaKind(uri)
+            val painter = rememberAsyncImagePainter(
+                model = rememberMediaModel(
+                    context = context,
+                    uriString = uri,
+                    mediaKind = mediaKind
+                )
+            )
             val intrinsicSize = painter.intrinsicSize
 
             BoxWithConstraints(
@@ -2817,15 +4255,30 @@ private fun PhotoColumn(
                 }
 
                 Box(
-                    modifier = imageModifier.clickable { fullscreenPhotoUri = uri },
+                    modifier = imageModifier.clickable {
+                        fullscreenMedia = FullscreenDiaryMedia(
+                            index = index,
+                            uri = uri,
+                            kind = mediaKind
+                        )
+                    },
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painter,
-                        contentDescription = "\u65e5\u8a18\u306e\u5199\u771f",
+                        contentDescription = if (mediaKind == DiaryMediaKind.Video) {
+                            "\u65e5\u8a18\u306e\u52d5\u753b"
+                        } else {
+                            "\u65e5\u8a18\u306e\u5199\u771f"
+                        },
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit
                     )
+                    if (mediaKind == DiaryMediaKind.Video) {
+                        VideoBadge(
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
                     if (isEditing) {
                         Box(
                             modifier = Modifier
@@ -2854,10 +4307,11 @@ private fun PhotoColumn(
         }
     }
 
-    fullscreenPhotoUri?.let { photoUri ->
-        FullscreenPhotoDialog(
-            photoUri = photoUri,
-            onDismiss = { fullscreenPhotoUri = null }
+    fullscreenMedia?.let { media ->
+        FullscreenMediaDialog(
+            mediaUris = photoUris,
+            initialIndex = media.index,
+            onDismiss = { fullscreenMedia = null }
         )
     }
 }
@@ -2872,10 +4326,18 @@ private fun PhotoRow(photoUris: List<String>) {
 }
 
 @Composable
-private fun FullscreenPhotoDialog(
-    photoUri: String,
+private fun FullscreenMediaDialog(
+    mediaUris: List<String>,
+    initialIndex: Int,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, (mediaUris.size - 1).coerceAtLeast(0))
+    ) {
+        mediaUris.size
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -2886,17 +4348,241 @@ private fun FullscreenPhotoDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .clickable(onClick = onDismiss),
+                .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            AsyncImage(
-                model = photoUri,
-                contentDescription = "\u62e1\u5927\u8868\u793a\u4e2d\u306e\u5199\u771f",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit
-            )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                val mediaUri = mediaUris[page]
+                val mediaKind = rememberDiaryMediaKind(mediaUri)
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (mediaKind == DiaryMediaKind.Video) {
+                        FullscreenVideoPlayer(
+                            videoUri = mediaUri,
+                            isActive = pagerState.currentPage == page,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        AsyncImage(
+                            model = rememberMediaModel(
+                                context = context,
+                                uriString = mediaUri,
+                                mediaKind = DiaryMediaKind.Image
+                            ),
+                            contentDescription = "\u62e1\u5927\u8868\u793a\u4e2d\u306e\u5199\u771f",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 12.dp, end = 12.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.22f),
+                        shape = CircleShape
+                    )
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "\u00d7",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun FullscreenVideoPlayer(
+    videoUri: String,
+    isActive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val parsedUri = remember(videoUri) { Uri.parse(videoUri) }
+    val exoPlayer = remember(context, videoUri) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(parsedUri))
+            prepare()
+            playWhenReady = isActive
+        }
+    }
+
+    LaunchedEffect(exoPlayer, isActive) {
+        exoPlayer.playWhenReady = isActive
+        if (isActive) {
+            exoPlayer.play()
+        } else {
+            exoPlayer.pause()
+        }
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { viewContext ->
+            PlayerView(viewContext).apply {
+                player = exoPlayer
+                useController = true
+                controllerAutoShow = true
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                setShowNextButton(false)
+                setShowPreviousButton(false)
+                setBackgroundColor(android.graphics.Color.BLACK)
+            }
+        },
+        update = { view ->
+            view.player = exoPlayer
+        }
+    )
+}
+
+@Composable
+private fun VideoBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.54f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "\u25b6",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White
+        )
+    }
+}
+
+@Composable
+private fun rememberDiaryMediaKind(uriString: String): DiaryMediaKind {
+    val context = LocalContext.current
+    return remember(uriString, context) {
+        val mimeType = runCatching {
+            context.contentResolver.getType(Uri.parse(uriString))
+        }.getOrNull().orEmpty()
+        if (mimeType.startsWith("video/")) {
+            DiaryMediaKind.Video
+        } else {
+            DiaryMediaKind.Image
+        }
+    }
+}
+
+@Composable
+private fun rememberMediaModel(
+    context: Context,
+    uriString: String,
+    mediaKind: DiaryMediaKind
+): Any = remember(context, uriString, mediaKind) {
+    val parsedUri = Uri.parse(uriString)
+    if (mediaKind == DiaryMediaKind.Video) {
+        ImageRequest.Builder(context)
+            .data(parsedUri)
+            .videoFrameMillis(0)
+            .build()
+    } else {
+        parsedUri
+    }
+}
+
+@Composable
+private fun SyncModeSelectionDialog(
+    selectedMode: GoogleDriveSyncMode,
+    onSelectMode: (GoogleDriveSyncMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(LABEL_CLOSE)
+            }
+        },
+        title = {
+            Text(
+                text = LABEL_SYNC_METHOD,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                )
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SyncModeOption(
+                    title = "\u81ea\u52d5\u3067\u65e5\u8a18\u3092\u4fdd\u5b58\u3057\u305f\u969b\u306b\u540c\u671f\u3059\u308b",
+                    selected = selectedMode == GoogleDriveSyncMode.AutoOnSave,
+                    onClick = { onSelectMode(GoogleDriveSyncMode.AutoOnSave) }
+                )
+                SyncModeOption(
+                    title = "\u624b\u52d5\u3067\u540c\u671f\u3059\u308b",
+                    selected = selectedMode == GoogleDriveSyncMode.Manual,
+                    onClick = { onSelectMode(GoogleDriveSyncMode.Manual) }
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun SyncModeOption(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(ControlShape)
+            .background(
+                if (selected) colorScheme.primary.copy(alpha = 0.12f)
+                else colorScheme.surface
+            )
+            .border(
+                width = 1.dp,
+                color = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.08f),
+                shape = ControlShape
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = if (selected) LABEL_SELECTED else "",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontFamily = JetBrainsMsGothicFontFamily
+            ),
+            color = colorScheme.primary
+        )
     }
 }
 

@@ -3,10 +3,15 @@ package com.makino.diary_app.data
 import android.content.Context
 import android.net.Uri
 import com.makino.diary_app.model.AppThemePreset
+import com.makino.diary_app.model.GoogleDriveSyncMode
+import com.makino.diary_app.ui.theme.DEFAULT_THEME_INTENSITY
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.Base64
 
 class DiaryRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -26,7 +31,107 @@ class DiaryRepository(context: Context) {
         AppThemePreset.fromStorageValue(prefs.getString(KEY_THEME_PRESET, null))
 
     fun saveThemePreset(themePreset: AppThemePreset) {
-        prefs.edit().putString(KEY_THEME_PRESET, themePreset.storageValue).apply()
+        prefs.edit()
+            .putString(KEY_THEME_PRESET, themePreset.storageValue)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun loadThemeIntensity(): Float =
+        prefs.getFloat(KEY_THEME_INTENSITY, DEFAULT_THEME_INTENSITY).coerceIn(0f, 1f)
+
+    fun saveThemeIntensity(themeIntensity: Float) {
+        prefs.edit()
+            .putFloat(KEY_THEME_INTENSITY, themeIntensity.coerceIn(0f, 1f))
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun loadBackupTreeUri(): String? =
+        prefs.getString(KEY_BACKUP_TREE_URI, null)
+
+    fun saveBackupTreeUri(uri: String) {
+        prefs.edit().putString(KEY_BACKUP_TREE_URI, uri).apply()
+    }
+
+    fun loadBackupAccountEmail(): String? =
+        prefs.getString(KEY_BACKUP_ACCOUNT_EMAIL, null)
+
+    fun saveBackupAccountEmail(email: String?) {
+        prefs.edit().putString(KEY_BACKUP_ACCOUNT_EMAIL, email).apply()
+    }
+
+    fun loadGoogleDriveSyncMode(): GoogleDriveSyncMode =
+        GoogleDriveSyncMode.fromStorageValue(prefs.getString(KEY_GOOGLE_DRIVE_SYNC_MODE, null))
+
+    fun saveGoogleDriveSyncMode(mode: GoogleDriveSyncMode) {
+        prefs.edit().putString(KEY_GOOGLE_DRIVE_SYNC_MODE, mode.storageValue).apply()
+    }
+
+    fun isGoogleDriveLinked(): Boolean =
+        prefs.getBoolean(KEY_GOOGLE_DRIVE_LINKED, false)
+
+    fun saveGoogleDriveLinked(linked: Boolean) {
+        prefs.edit().putBoolean(KEY_GOOGLE_DRIVE_LINKED, linked).apply()
+    }
+
+    fun disconnectGoogleDrive() {
+        prefs.edit()
+            .remove(KEY_BACKUP_ACCOUNT_EMAIL)
+            .putBoolean(KEY_GOOGLE_DRIVE_LINKED, false)
+            .putLong(KEY_LAST_CLOUD_SYNC_DIARY_UPDATED_AT_MILLIS, 0L)
+            .apply()
+    }
+
+    fun isNotificationsEnabled(): Boolean =
+        prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
+
+    fun saveNotificationsEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean(KEY_NOTIFICATIONS_ENABLED, enabled)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun isFingerprintAuthEnabled(): Boolean =
+        prefs.getBoolean(KEY_FINGERPRINT_AUTH_ENABLED, false)
+
+    fun saveFingerprintAuthEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean(KEY_FINGERPRINT_AUTH_ENABLED, enabled)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun isPasswordAuthEnabled(): Boolean =
+        prefs.getBoolean(KEY_PASSWORD_AUTH_ENABLED, false)
+
+    fun savePasswordAuthEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean(KEY_PASSWORD_AUTH_ENABLED, enabled)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun hasPasswordCredential(): Boolean =
+        prefs.contains(KEY_PASSWORD_HASH) && prefs.contains(KEY_PASSWORD_SALT)
+
+    fun savePasswordCredential(password: String) {
+        val saltBytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        val salt = Base64.getEncoder().encodeToString(saltBytes)
+        val hash = hashPassword(password, saltBytes)
+        prefs.edit()
+            .putString(KEY_PASSWORD_SALT, salt)
+            .putString(KEY_PASSWORD_HASH, hash)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun verifyPassword(password: String): Boolean {
+        val salt = prefs.getString(KEY_PASSWORD_SALT, null) ?: return false
+        val storedHash = prefs.getString(KEY_PASSWORD_HASH, null) ?: return false
+        val saltBytes = runCatching { Base64.getDecoder().decode(salt) }.getOrNull() ?: return false
+        return hashPassword(password, saltBytes) == storedHash
     }
 
     fun loadReminderTimes(): List<LocalTime> {
@@ -60,6 +165,7 @@ class DiaryRepository(context: Context) {
         prefs.edit()
             .putString(KEY_REMINDER_TIMES, json.toString())
             .putBoolean(KEY_REMINDER_PROMPT_SHOWN, true)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
             .apply()
     }
 
@@ -67,14 +173,91 @@ class DiaryRepository(context: Context) {
         prefs.getBoolean(KEY_REMINDER_PROMPT_SHOWN, false)
 
     fun markReminderPromptSeen() {
-        prefs.edit().putBoolean(KEY_REMINDER_PROMPT_SHOWN, true).apply()
+        prefs.edit()
+            .putBoolean(KEY_REMINDER_PROMPT_SHOWN, true)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
     }
 
     fun hasCompletedOnboarding(): Boolean =
         prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
 
     fun markOnboardingCompleted() {
-        prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, true).apply()
+        prefs.edit()
+            .putBoolean(KEY_ONBOARDING_COMPLETED, true)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun clearAllData() {
+        prefs.edit()
+            .clear()
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .putLong(KEY_DIARY_UPDATED_AT_MILLIS, 0L)
+            .putLong(KEY_LAST_CLOUD_SYNC_DIARY_UPDATED_AT_MILLIS, 0L)
+            .apply()
+    }
+
+    fun loadDataUpdatedAtMillis(): Long =
+        prefs.getLong(KEY_DATA_UPDATED_AT_MILLIS, 0L)
+
+    fun loadDiaryUpdatedAtMillis(): Long =
+        prefs.getLong(KEY_DIARY_UPDATED_AT_MILLIS, 0L)
+            .takeIf { it > 0L }
+            ?: loadEntries().maxOfOrNull(DiaryEntry::updatedAtMillis)
+            ?: 0L
+
+    fun loadLastCloudSyncDiaryUpdatedAtMillis(): Long =
+        prefs.getLong(KEY_LAST_CLOUD_SYNC_DIARY_UPDATED_AT_MILLIS, 0L)
+
+    fun saveLastCloudSyncDiaryUpdatedAtMillis(updatedAtMillis: Long) {
+        prefs.edit().putLong(KEY_LAST_CLOUD_SYNC_DIARY_UPDATED_AT_MILLIS, updatedAtMillis).apply()
+    }
+
+    fun exportBackupJson(): String {
+        val entriesArray = JSONArray()
+        loadEntries()
+            .sortedBy { it.date }
+            .forEach { entry -> entriesArray.put(entry.toJson()) }
+
+        return JSONObject()
+            .put("version", 2)
+            .put("entries", entriesArray)
+            .put("diaryUpdatedAtMillis", loadDiaryUpdatedAtMillis())
+            .put("exportedAtMillis", System.currentTimeMillis())
+            .toString()
+    }
+
+    fun readBackupDataUpdatedAtMillis(json: String): Long =
+        JSONObject(json).let { root ->
+            root.optLong("diaryUpdatedAtMillis", 0L)
+                .takeIf { it > 0L }
+                ?: root.optLong("dataUpdatedAtMillis", 0L)
+        }
+
+    fun backupHasEntries(json: String): Boolean {
+        val root = JSONObject(json)
+        val entries = when {
+            root.has("entries") -> root.optJSONArray("entries")
+            else -> extractEntriesArrayFromLegacyBackup(root)
+        }
+        return entries?.length()?.let { it > 0 } == true
+    }
+
+    fun restoreBackupJson(json: String) {
+        val root = JSONObject(json)
+        val entriesJson = when {
+            root.has("entries") -> root.optJSONArray("entries")
+            else -> extractEntriesArrayFromLegacyBackup(root)
+        } ?: throw IllegalArgumentException("entries not found")
+        val updatedAtMillis = readBackupDataUpdatedAtMillis(json)
+            .takeIf { it > 0L }
+            ?: readEntriesUpdatedAtMillis(entriesJson)
+
+        prefs.edit()
+            .putString(KEY_ENTRIES, entriesJson.toString())
+            .putLong(KEY_DIARY_UPDATED_AT_MILLIS, updatedAtMillis)
+            .apply()
     }
 
     fun ensureDraft(date: LocalDate): DiaryEntry {
@@ -82,14 +265,14 @@ class DiaryRepository(context: Context) {
         if (existing != null) {
             if (existing.prompt == FIXED_PROMPT) return existing
             val updated = existing.copy(prompt = FIXED_PROMPT)
-            saveEntry(updated)
+            saveEntry(updated, updateDiaryTimestamp = false)
             return updated
         }
         val created = DiaryEntry(
             date = date,
             prompt = FIXED_PROMPT
         )
-        saveEntry(created)
+        saveEntry(created, updateDiaryTimestamp = false)
         return created
     }
 
@@ -161,7 +344,7 @@ class DiaryRepository(context: Context) {
         return updated
     }
 
-    private fun saveEntry(entry: DiaryEntry) {
+    private fun saveEntry(entry: DiaryEntry, updateDiaryTimestamp: Boolean = true) {
         val entries = loadEntries().toMutableList()
         val existingIndex = entries.indexOfFirst { it.date == entry.date }
         if (existingIndex >= 0) {
@@ -174,7 +357,13 @@ class DiaryRepository(context: Context) {
         entries.sortedBy { it.date }.forEach { stored ->
             json.put(stored.toJson())
         }
-        prefs.edit().putString(KEY_ENTRIES, json.toString()).apply()
+        val editor = prefs.edit()
+            .putString(KEY_ENTRIES, json.toString())
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+        if (updateDiaryTimestamp) {
+            editor.putLong(KEY_DIARY_UPDATED_AT_MILLIS, System.currentTimeMillis())
+        }
+        editor.apply()
     }
 
     private fun DiaryEntry.toJson(): JSONObject = JSONObject()
@@ -207,14 +396,54 @@ class DiaryRepository(context: Context) {
         )
     }
 
+    private fun extractEntriesArrayFromLegacyBackup(root: JSONObject): JSONArray? {
+        val preferenceArray = root.optJSONArray("preferences") ?: return null
+        for (index in 0 until preferenceArray.length()) {
+            val item = preferenceArray.optJSONObject(index) ?: continue
+            if (item.optString("key") != KEY_ENTRIES) continue
+            val rawEntries = item.optString("value")
+            if (rawEntries.isBlank()) return JSONArray()
+            return JSONArray(rawEntries)
+        }
+        return null
+    }
+
+    private fun readEntriesUpdatedAtMillis(entriesArray: JSONArray): Long =
+        buildList {
+            for (index in 0 until entriesArray.length()) {
+                val item = entriesArray.optJSONObject(index) ?: continue
+                add(item.optLong("updatedAtMillis", 0L))
+            }
+        }.maxOrNull() ?: 0L
+
     private companion object {
         const val FIXED_PROMPT = "\u4eca\u65e5\u306f\u3069\u3093\u306a\u4e00\u65e5\u3067\u3057\u305f\u304b\uff1f"
         const val KEY_ENTRIES = "entries"
         const val KEY_THEME_PRESET = "theme_preset"
+        const val KEY_THEME_INTENSITY = "theme_intensity"
+        const val KEY_BACKUP_TREE_URI = "backup_tree_uri"
+        const val KEY_BACKUP_ACCOUNT_EMAIL = "backup_account_email"
+        const val KEY_GOOGLE_DRIVE_LINKED = "google_drive_linked"
+        const val KEY_GOOGLE_DRIVE_SYNC_MODE = "google_drive_sync_mode"
+        const val KEY_DATA_UPDATED_AT_MILLIS = "data_updated_at_millis"
+        const val KEY_DIARY_UPDATED_AT_MILLIS = "diary_updated_at_millis"
+        const val KEY_LAST_CLOUD_SYNC_DIARY_UPDATED_AT_MILLIS = "last_cloud_sync_diary_updated_at_millis"
         const val KEY_REMINDER_TIMES = "reminder_times"
         const val KEY_REMINDER_HOUR = "reminder_hour"
         const val KEY_REMINDER_MINUTE = "reminder_minute"
         const val KEY_REMINDER_PROMPT_SHOWN = "reminder_prompt_shown"
         const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+        const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
+        const val KEY_FINGERPRINT_AUTH_ENABLED = "fingerprint_auth_enabled"
+        const val KEY_PASSWORD_AUTH_ENABLED = "password_auth_enabled"
+        const val KEY_PASSWORD_HASH = "password_hash"
+        const val KEY_PASSWORD_SALT = "password_salt"
+    }
+
+    private fun hashPassword(password: String, saltBytes: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(saltBytes)
+        return digest.digest(password.toByteArray(Charsets.UTF_8))
+            .joinToString(separator = "") { "%02x".format(it) }
     }
 }
