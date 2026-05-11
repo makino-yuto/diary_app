@@ -64,3 +64,7 @@ Google ログインなしでも使えます。<br>
 ## 動作要件
 - Android 8.0 以上
 - minSdk 26
+
+## License
+
+MIT License
