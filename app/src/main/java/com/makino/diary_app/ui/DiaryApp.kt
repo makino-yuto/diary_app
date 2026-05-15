@@ -3242,11 +3242,12 @@ private fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = LABEL_SETTINGS_TITLE,
+                modifier = Modifier.padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = JetBrainsMsGothicFontFamily
                 )
@@ -3352,7 +3353,9 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = LABEL_SETTING_VERSION,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontFamily = JetBrainsMsGothicFontFamily
                 ),
@@ -3959,23 +3962,18 @@ private fun SettingsSection(
     ) {
         Text(
             text = title,
+            modifier = Modifier.padding(horizontal = 16.dp),
             style = MaterialTheme.typography.labelLarge.copy(
                 fontFamily = JetBrainsMsGothicFontFamily
             ),
             color = colorScheme.secondaryTextColor(0.74f)
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(
-                    width = 1.dp,
-                    color = colorScheme.exactBorderColor(0.18f)
-                )
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                content = content
-            )
+            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
+            content()
+            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
         }
     }
 }
