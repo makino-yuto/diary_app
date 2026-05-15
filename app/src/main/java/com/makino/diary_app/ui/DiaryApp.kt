@@ -3268,10 +3268,17 @@ private fun SettingsScreen(
                     onCheckedChange = onSetNotificationsEnabled
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
-                SettingsActionRow(
-                    title = LABEL_THEME,
-                    onClick = onOpenThemeSelection
-                )
+            SettingsActionRow(
+                title = LABEL_THEME,
+                trailingContent = {
+                    SettingsThemeSwatch(
+                        previewColor = paletteForTheme(themePreset, DEFAULT_THEME_INTENSITY).previewColors.firstOrNull()
+                            ?: colorScheme.primary,
+                        borderColor = colorScheme.exactBorderColor(0.24f)
+                    )
+                },
+                onClick = onOpenThemeSelection
+            )
             }
 
             SettingsSection(
@@ -3977,6 +3984,7 @@ private fun SettingsActionRow(
     title: String,
     supportingText: String? = null,
     trailingText: String? = null,
+    trailingContent: (@Composable (() -> Unit))? = null,
     titleColor: Color = Color.Unspecified,
     onClick: () -> Unit
 ) {
@@ -3987,8 +3995,8 @@ private fun SettingsActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .heightIn(min = 58.dp)
-            .padding(horizontal = 16.dp, vertical = 13.dp),
+            .height(60.dp)
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
@@ -4010,18 +4018,22 @@ private fun SettingsActionRow(
                 )
             }
         }
-        if (trailingText != null) {
+        if (trailingContent != null || trailingText != null) {
             Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = trailingText,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontFamily = JetBrainsMsGothicFontFamily
-                ),
-                color = if (colorScheme.isPureMonochromeTheme()) colorScheme.onSurface else colorScheme.primary,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (trailingContent != null) {
+                trailingContent()
+            } else if (trailingText != null) {
+                Text(
+                    text = trailingText,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = JetBrainsMsGothicFontFamily
+                    ),
+                    color = if (colorScheme.isPureMonochromeTheme()) colorScheme.onSurface else colorScheme.primary,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -4043,8 +4055,8 @@ private fun SettingsSwitchRow(
                 if (onClick != null) Modifier.clickable(onClick = onClick)
                 else Modifier
             )
-            .heightIn(min = 58.dp)
-            .padding(horizontal = 16.dp, vertical = 13.dp),
+            .height(60.dp)
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -4073,6 +4085,22 @@ private fun SettingsSwitchRow(
             onCheckedChange = onCheckedChange
         )
     }
+}
+
+@Composable
+private fun SettingsThemeSwatch(
+    previewColor: Color,
+    borderColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .size(18.dp)
+            .border(
+                width = 1.dp,
+                color = borderColor
+            )
+            .background(previewColor)
+    )
 }
 
 @Composable
