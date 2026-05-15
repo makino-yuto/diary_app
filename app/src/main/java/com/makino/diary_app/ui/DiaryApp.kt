@@ -3993,15 +3993,26 @@ private fun SettingsActionRow(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val resolvedTitleColor = if (titleColor == Color.Unspecified) colorScheme.onSurface else titleColor
+    val rowBackgroundColor = if (colorScheme.isPureMonochromeTheme()) {
+        colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .height(60.dp)
+            .background(rowBackgroundColor)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        SettingsRowMarker(
+            color = if (titleColor == Color.Unspecified) colorScheme.primary else resolvedTitleColor,
+            borderColor = colorScheme.exactBorderColor(0.2f)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -4050,6 +4061,11 @@ private fun SettingsSwitchRow(
     onClick: (() -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val rowBackgroundColor = if (colorScheme.isPureMonochromeTheme()) {
+        colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
 
     Row(
         modifier = Modifier
@@ -4059,10 +4075,16 @@ private fun SettingsSwitchRow(
                 else Modifier
             )
             .height(60.dp)
+            .background(rowBackgroundColor)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        SettingsRowMarker(
+            color = colorScheme.primary,
+            borderColor = colorScheme.exactBorderColor(0.2f)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -4086,6 +4108,28 @@ private fun SettingsSwitchRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+@Composable
+private fun SettingsRowMarker(
+    color: Color,
+    borderColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .size(18.dp)
+            .border(
+                width = 1.dp,
+                color = borderColor
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(color)
         )
     }
 }
