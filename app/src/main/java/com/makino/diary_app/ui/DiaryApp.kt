@@ -3181,6 +3181,10 @@ private fun SettingsScreen(
     var securityDialogMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var passwordDialogMode by remember { mutableStateOf<PasswordDialogMode?>(null) }
     var showSyncModeDialog by rememberSaveable { mutableStateOf(false) }
+    var isNotificationThemeExpanded by rememberSaveable { mutableStateOf(true) }
+    var isImportantExpanded by rememberSaveable { mutableStateOf(true) }
+    var isSecurityExpanded by rememberSaveable { mutableStateOf(true) }
+    var isBackupExpanded by rememberSaveable { mutableStateOf(true) }
 
     val openPasswordSetup = {
         passwordDialogMode = if (hasPasswordCredential) {
@@ -3254,7 +3258,9 @@ private fun SettingsScreen(
             )
 
             SettingsSection(
-                title = LABEL_SETTINGS_SECTION_NOTIFICATION_THEME
+                title = LABEL_SETTINGS_SECTION_NOTIFICATION_THEME,
+                expanded = isNotificationThemeExpanded,
+                onToggleExpanded = { isNotificationThemeExpanded = !isNotificationThemeExpanded }
             ) {
                 SettingsActionRow(
                     title = LABEL_NOTIFICATION_TIME,
@@ -3282,7 +3288,9 @@ private fun SettingsScreen(
             }
 
             SettingsSection(
-                title = LABEL_SETTINGS_SECTION_IMPORTANT
+                title = LABEL_SETTINGS_SECTION_IMPORTANT,
+                expanded = isImportantExpanded,
+                onToggleExpanded = { isImportantExpanded = !isImportantExpanded }
             ) {
                 SettingsActionRow(
                     title = LABEL_DELETE_ALL_DATA,
@@ -3307,7 +3315,9 @@ private fun SettingsScreen(
             }
 
             SettingsSection(
-                title = LABEL_SETTINGS_SECTION_SECURITY
+                title = LABEL_SETTINGS_SECTION_SECURITY,
+                expanded = isSecurityExpanded,
+                onToggleExpanded = { isSecurityExpanded = !isSecurityExpanded }
             ) {
                 SettingsSwitchRow(
                     title = LABEL_FINGERPRINT_AUTH,
@@ -3324,7 +3334,9 @@ private fun SettingsScreen(
             }
 
             SettingsSection(
-                title = LABEL_SETTINGS_SECTION_BACKUP
+                title = LABEL_SETTINGS_SECTION_BACKUP,
+                expanded = isBackupExpanded,
+                onToggleExpanded = { isBackupExpanded = !isBackupExpanded }
             ) {
                 SettingsActionRow(
                     title = LABEL_GOOGLE_ACCOUNT,
@@ -3955,26 +3967,45 @@ private fun ThemeInlineChip(
 @Composable
 private fun SettingsSection(
     title: String,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Column(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(
-            text = title,
-            modifier = Modifier.padding(horizontal = 16.dp),
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontFamily = JetBrainsMsGothicFontFamily
-            ),
-            color = colorScheme.secondaryTextColor(0.74f)
-        )
-        Column(
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggleExpanded)
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
-            content()
-            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.secondaryTextColor(0.74f)
+            )
+            Text(
+                text = if (expanded) "−" else "+",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = JetBrainsMsGothicFontFamily
+                ),
+                color = colorScheme.secondaryTextColor(0.74f)
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
+                content()
+                HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
+            }
         }
     }
 }
@@ -4095,9 +4126,11 @@ private fun SettingsThemeSwatch(
     Box(
         modifier = Modifier
             .size(18.dp)
+            .clip(CircleShape)
             .border(
                 width = 1.dp,
-                color = borderColor
+                color = borderColor,
+                shape = CircleShape
             )
             .background(previewColor)
     )
