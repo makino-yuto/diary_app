@@ -4022,7 +4022,7 @@ private fun SettingsActionRow(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val resolvedTitleColor = if (titleColor == Color.Unspecified) colorScheme.onSurface else titleColor
-    val rowBackgroundColor = colorScheme.surfaceVariant
+    val rowBackgroundColor = colorScheme.surface
 
     Row(
         modifier = Modifier
@@ -4087,7 +4087,7 @@ private fun SettingsSwitchRow(
     onClick: (() -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val rowBackgroundColor = colorScheme.surfaceVariant
+    val rowBackgroundColor = colorScheme.surface
 
     Row(
         modifier = Modifier
