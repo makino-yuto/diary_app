@@ -3964,12 +3964,18 @@ private fun SettingsSection(
             ),
             color = colorScheme.secondaryTextColor(0.74f)
         )
-        Column(
-            modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = colorScheme.exactBorderColor(0.18f)
+                )
         ) {
-            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
-            content()
-            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                content = content
+            )
         }
     }
 }
