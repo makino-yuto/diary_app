@@ -3258,7 +3258,6 @@ private fun SettingsScreen(
             ) {
                 SettingsActionRow(
                     title = LABEL_NOTIFICATION_TIME,
-                    supportingText = PROMPT_NOTIFICATION_SETTINGS_NOTE,
                     trailingText = formatReminderSummary(reminderTimes),
                     onClick = onOpenReminderSettings
                 )
@@ -3271,7 +3270,6 @@ private fun SettingsScreen(
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_THEME,
-                    supportingText = PROMPT_THEME_SETTINGS_NOTE,
                     onClick = onOpenThemeSelection
                 )
             }
@@ -3312,7 +3310,6 @@ private fun SettingsScreen(
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsSwitchRow(
                     title = LABEL_PASSWORD_AUTH,
-                    supportingText = PROMPT_PASSWORD_ROW_NOTE,
                     checked = passwordAuthEnabled,
                     onCheckedChange = handlePasswordToggle,
                     onClick = openPasswordSetup
@@ -3324,14 +3321,12 @@ private fun SettingsScreen(
             ) {
                 SettingsActionRow(
                     title = LABEL_GOOGLE_ACCOUNT,
-                    supportingText = PROMPT_BACKUP_DIRECTORY_NOTE,
                     trailingText = backupAccountEmail ?: if (isGoogleDriveLinked) LABEL_CONNECTED else LABEL_UNSET,
                     onClick = onConnectGoogleDrive
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_SYNC_METHOD,
-                    supportingText = PROMPT_SYNC_METHOD_NOTE,
                     trailingText = googleDriveSyncMode.label,
                     onClick = { showSyncModeDialog = true }
                 )
@@ -3339,7 +3334,6 @@ private fun SettingsScreen(
                     HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                     SettingsActionRow(
                         title = LABEL_SYNC_NOW,
-                        supportingText = PROMPT_SYNC_NOW_NOTE,
                         onClick = onManualGoogleDriveSync
                     )
                     HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
@@ -3993,6 +3987,7 @@ private fun SettingsActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
+            .heightIn(min = 58.dp)
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -4024,7 +4019,7 @@ private fun SettingsActionRow(
                 ),
                 color = if (colorScheme.isPureMonochromeTheme()) colorScheme.onSurface else colorScheme.primary,
                 textAlign = TextAlign.End,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -4048,7 +4043,8 @@ private fun SettingsSwitchRow(
                 if (onClick != null) Modifier.clickable(onClick = onClick)
                 else Modifier
             )
-            .padding(horizontal = 16.dp, vertical = 11.dp),
+            .heightIn(min = 58.dp)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
