@@ -3955,7 +3955,7 @@ private fun SettingsSection(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             text = title,
@@ -3964,19 +3964,12 @@ private fun SettingsSection(
             ),
             color = colorScheme.secondaryTextColor(0.74f)
         )
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = PanelShape,
-            colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
-            border = BorderStroke(
-                width = 1.dp,
-                color = colorScheme.exactBorderColor()
-            )
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                content = content
-            )
+            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
+            content()
+            HorizontalDivider(color = colorScheme.exactBorderColor(0.18f))
         }
     }
 }
