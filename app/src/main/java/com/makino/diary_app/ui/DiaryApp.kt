@@ -74,6 +74,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Policy
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -129,6 +143,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -3259,21 +3274,24 @@ private fun SettingsScreen(
             ) {
                 SettingsActionRow(
                     title = LABEL_NOTIFICATION_TIME,
+                    leadingIcon = Icons.Outlined.Schedule,
                     trailingText = formatReminderSummary(reminderTimes),
                     onClick = onOpenReminderSettings
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsSwitchRow(
                     title = LABEL_NOTIFICATION_TOGGLE,
+                    leadingIcon = Icons.Outlined.Notifications,
                     checked = notificationsEnabled,
                     onCheckedChange = onSetNotificationsEnabled
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
-            SettingsActionRow(
-                title = LABEL_THEME,
-                trailingContent = {
-                    SettingsThemeSwatch(
-                        previewColor = paletteForTheme(themePreset, DEFAULT_THEME_INTENSITY).previewColors.firstOrNull()
+                SettingsActionRow(
+                    title = LABEL_THEME,
+                    leadingIcon = Icons.Outlined.Palette,
+                    trailingContent = {
+                        SettingsThemeSwatch(
+                            previewColor = paletteForTheme(themePreset, DEFAULT_THEME_INTENSITY).previewColors.firstOrNull()
                             ?: colorScheme.primary,
                         borderColor = colorScheme.exactBorderColor(0.24f)
                     )
@@ -3287,22 +3305,26 @@ private fun SettingsScreen(
             ) {
                 SettingsActionRow(
                     title = LABEL_DELETE_ALL_DATA,
+                    leadingIcon = Icons.Outlined.Delete,
                     titleColor = colorScheme.error,
                     onClick = { showDeleteDialog = true }
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_TERMS_OF_USE,
+                    leadingIcon = Icons.Outlined.Description,
                     onClick = { legalDialogTitle = LABEL_TERMS_OF_USE }
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_PRIVACY_POLICY,
+                    leadingIcon = Icons.Outlined.Policy,
                     onClick = { legalDialogTitle = LABEL_PRIVACY_POLICY }
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_COMMERCIAL_DISCLOSURE,
+                    leadingIcon = Icons.Outlined.Info,
                     onClick = { legalDialogTitle = LABEL_COMMERCIAL_DISCLOSURE }
                 )
             }
@@ -3312,12 +3334,14 @@ private fun SettingsScreen(
             ) {
                 SettingsSwitchRow(
                     title = LABEL_FINGERPRINT_AUTH,
+                    leadingIcon = Icons.Outlined.Fingerprint,
                     checked = fingerprintAuthEnabled,
                     onCheckedChange = handleFingerprintToggle
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsSwitchRow(
                     title = LABEL_PASSWORD_AUTH,
+                    leadingIcon = Icons.Outlined.Lock,
                     checked = passwordAuthEnabled,
                     onCheckedChange = handlePasswordToggle,
                     onClick = openPasswordSetup
@@ -3329,12 +3353,14 @@ private fun SettingsScreen(
             ) {
                 SettingsActionRow(
                     title = LABEL_GOOGLE_ACCOUNT,
+                    leadingIcon = Icons.Outlined.AccountCircle,
                     trailingText = backupAccountEmail ?: if (isGoogleDriveLinked) LABEL_CONNECTED else LABEL_UNSET,
                     onClick = onConnectGoogleDrive
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
                     title = LABEL_SYNC_METHOD,
+                    leadingIcon = Icons.Outlined.Sync,
                     trailingText = googleDriveSyncMode.label,
                     onClick = { showSyncModeDialog = true }
                 )
@@ -3342,11 +3368,13 @@ private fun SettingsScreen(
                     HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                     SettingsActionRow(
                         title = LABEL_SYNC_NOW,
+                        leadingIcon = Icons.Outlined.CloudUpload,
                         onClick = onManualGoogleDriveSync
                     )
                     HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                     SettingsActionRow(
                         title = LABEL_LOGOUT,
+                        leadingIcon = Icons.AutoMirrored.Outlined.Logout,
                         onClick = onDisconnectGoogleDrive
                     )
                 }
@@ -3985,6 +4013,7 @@ private fun SettingsSection(
 @Composable
 private fun SettingsActionRow(
     title: String,
+    leadingIcon: ImageVector,
     supportingText: String? = null,
     trailingText: String? = null,
     trailingContent: (@Composable (() -> Unit))? = null,
@@ -3993,11 +4022,7 @@ private fun SettingsActionRow(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val resolvedTitleColor = if (titleColor == Color.Unspecified) colorScheme.onSurface else titleColor
-    val rowBackgroundColor = if (colorScheme.isPureMonochromeTheme()) {
-        colorScheme.surfaceVariant.copy(alpha = 0.35f)
-    } else {
-        colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    }
+    val rowBackgroundColor = colorScheme.surfaceVariant
 
     Row(
         modifier = Modifier
@@ -4008,9 +4033,9 @@ private fun SettingsActionRow(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SettingsRowMarker(
-            color = if (titleColor == Color.Unspecified) colorScheme.primary else resolvedTitleColor,
-            borderColor = colorScheme.exactBorderColor(0.2f)
+        SettingsRowIcon(
+            icon = leadingIcon,
+            tint = if (titleColor == Color.Unspecified) colorScheme.primary else resolvedTitleColor
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(
@@ -4055,17 +4080,14 @@ private fun SettingsActionRow(
 @Composable
 private fun SettingsSwitchRow(
     title: String,
+    leadingIcon: ImageVector,
     supportingText: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     onClick: (() -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val rowBackgroundColor = if (colorScheme.isPureMonochromeTheme()) {
-        colorScheme.surfaceVariant.copy(alpha = 0.35f)
-    } else {
-        colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    }
+    val rowBackgroundColor = colorScheme.surfaceVariant
 
     Row(
         modifier = Modifier
@@ -4080,9 +4102,9 @@ private fun SettingsSwitchRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        SettingsRowMarker(
-            color = colorScheme.primary,
-            borderColor = colorScheme.exactBorderColor(0.2f)
+        SettingsRowIcon(
+            icon = leadingIcon,
+            tint = colorScheme.primary
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(
@@ -4113,25 +4135,17 @@ private fun SettingsSwitchRow(
 }
 
 @Composable
-private fun SettingsRowMarker(
-    color: Color,
-    borderColor: Color
+private fun SettingsRowIcon(
+    icon: ImageVector,
+    tint: Color
 ) {
-    Box(
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
         modifier = Modifier
-            .size(18.dp)
-            .border(
-                width = 1.dp,
-                color = borderColor
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(color)
-        )
-    }
+            .size(20.dp),
+        tint = tint
+    )
 }
 
 @Composable
