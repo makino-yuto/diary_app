@@ -219,6 +219,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -2394,30 +2395,33 @@ private fun CalendarScreen(
     val calendarShellContentColor = colorScheme.calendarShellContentColor()
     var selectedDate by rememberSaveable(uiState.visibleMonth) { mutableStateOf<LocalDate?>(null) }
     var isMonthPickerVisible by rememberSaveable { mutableStateOf(false) }
-    var isRecenteringPager by remember { mutableStateOf(false) }
+    val pagerBaseMonth = remember { YearMonth.of(1900, 1) }
+    val pagerMonthCount = remember { 12 * 400 }
+    fun monthToPage(month: YearMonth): Int {
+        val monthsBetween = ChronoUnit.MONTHS.between(
+            pagerBaseMonth.atDay(1),
+            month.atDay(1)
+        ).toInt()
+        return monthsBetween.coerceIn(0, pagerMonthCount - 1)
+    }
     val pagerState = rememberPagerState(
-        initialPage = 1,
-        pageCount = { 3 }
+        initialPage = monthToPage(uiState.visibleMonth),
+        pageCount = { pagerMonthCount }
     )
 
     LaunchedEffect(uiState.visibleMonth) {
-        if (pagerState.currentPage != 1) {
-            pagerState.scrollToPage(1)
+        val targetPage = monthToPage(uiState.visibleMonth)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.scrollToPage(targetPage)
         }
-        isRecenteringPager = false
     }
 
-    LaunchedEffect(pagerState, uiState.visibleMonth) {
+    LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            if (page == 1 || isRecenteringPager) return@collect
-            isRecenteringPager = true
-            val targetMonth = when (page) {
-                0 -> uiState.visibleMonth.minusMonths(1)
-                2 -> uiState.visibleMonth.plusMonths(1)
-                else -> uiState.visibleMonth
+            val targetMonth = pagerBaseMonth.plusMonths(page.toLong())
+            if (targetMonth != uiState.visibleMonth) {
+                onSelectMonth(targetMonth)
             }
-            pagerState.scrollToPage(1)
-            onSelectMonth(targetMonth)
         }
     }
 
@@ -2512,7 +2516,7 @@ private fun CalendarScreen(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxWidth(),
-                        userScrollEnabled = !isRecenteringPager,
+                        userScrollEnabled = true,
                         beyondViewportPageCount = 1,
                         pageSpacing = 0.dp,
                         flingBehavior = PagerDefaults.flingBehavior(
@@ -2525,7 +2529,7 @@ private fun CalendarScreen(
                             snapPositionalThreshold = 0.7f
                         )
                     ) { page ->
-                        val pageMonth = uiState.visibleMonth.plusMonths((page - 1).toLong())
+                        val pageMonth = pagerBaseMonth.plusMonths(page.toLong())
                         val pageDays = remember(pageMonth) { calendarDays(pageMonth) }
                         val pageSelectedDate = selectedDate?.takeIf {
                             YearMonth.from(it) == pageMonth
