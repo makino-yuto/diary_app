@@ -7,7 +7,7 @@ Google ログインなしでも使えます。
 必要な場合だけ Google Drive と連携して、日記データのバックアップや復元ができます。
 
 ## リリース
-- [最新 APK v0.1.0](https://github.com/makino-yuto/diary_app/releases/download/v0.1.0/mainichi-diary-v0.1.0.apk)
+- [v0.1.0](https://github.com/makino-yuto/diary_app/releases/download/v0.1.0/mainichi-diary-v0.1.0.apk)
 
 ## 主な機能
 - 日記の作成
