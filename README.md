@@ -1,71 +1,63 @@
 # まいにち日記
 
-写真、動画を記録できる日記アプリです。<br>
-ひとまずGoogle playストアへのリリースに向けてどんどん更新していきます。
+写真や動画を添えて、その日の出来事を残せる日記アプリです。  
+ひとことの日記から、あとで見返したくなる記録まで、端末の中に積み重ねていけます。
 
-
-Google ログインなしでも使えます。<br>
-必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。<br>
-画像/動画の複数端末間同期は試行錯誤しています。
+Google ログインなしでも使えます。  
+必要な場合だけ Google Drive と連携して、日記データのバックアップや復元ができます。
 
 ## リリース
-- [v0.1.0]
+- [最新 APK v0.1.0](https://github.com/makino-yuto/diary_app/releases/download/v0.1.0/mainichi-diary-v0.1.0.apk)
 
 ## 主な機能
-- 日記作成
-  その日の出来事を入力しながら日記を作成
+- 日記の作成
+  その日の出来事を自由に書き残せます
 - カレンダー表示
-  日付ごとに日記の有無を確認して、好きな日の日記を閲覧
+  月ごとに日記の有無を確認して、好きな日付の日記を開けます
 - 日記タブ
-  保存済みの日記を一覧で確認して、写真や動画つきの日記をすばやく開ける
+  保存済みの日記を一覧で見返せます
 - 写真・動画の添付
-  1 日記に複数の写真や動画を追加可能
-- アプリ内メディアビューア
-  写真と動画を全画面で表示し、追加順のままスワイプで移動可能
-- 日記の再編集
-  保存後の日記本文や添付メディアをあとから編集可能
+  日記に写真や動画を追加できます
+- 全画面メディアビューア
+  写真と動画をアプリ内でそのまま表示できます
 - 通知リマインド
-  複数の通知時刻を設定して、未記入の日だけ通知
-- テーマカラー変更
-  複数テーマと色の強さを設定可能
+  設定した時間に日記を書くきっかけを受け取れます
+- テーマ切り替え
+  好みのテーマカラーを選べます
 - セキュリティ
-  指紋認証とパスワード認証に対応
-- Google Drive 同期
-  日記データを Drive にバックアップして、別端末で復元可能
-
-## 同期・保存
-- 日記データは基本的に端末内へ保存
-- Google Drive 連携時は日記データのみ同期
-- 通知設定、テーマ設定、認証設定などはローカル保持
-- 自動同期または手動同期を選択可能
+  指紋認証やパスワード認証でロックできます
+- Google Drive 連携
+  日記データを Google Drive に保存し、復元できます
 
 ## 技術スタック
-- 言語: Kotlin
-- UI: Jetpack Compose
-- ナビゲーション: Navigation Compose
-- 画像 / 動画表示: Coil 3, Media3 ExoPlayer
-- 認証: Android BiometricPrompt
-- Google 連携: Google Sign-In, Google Drive API
-- 保存: SharedPreferences ベースのローカル保存
-- ビルド: Gradle, Android Gradle Plugin
+- Kotlin
+- Jetpack Compose
+- Navigation Compose
+- Coil 3
+- Media3 ExoPlayer
+- BiometricPrompt
+- Google Sign-In
+- Google Drive API
+- SharedPreferences
 
 ## 開発
 ```bash
 ./gradlew assembleDebug
 ./gradlew installDebug
+./gradlew assembleRelease
 ./gradlew test
 ```
 
 ```powershell
 .\gradlew.bat assembleDebug
 .\gradlew.bat installDebug
+.\gradlew.bat assembleRelease
 .\gradlew.bat test
 ```
 
-## 動作要件
+## 動作環境
 - Android 8.0 以上
 - minSdk 26
 
 ## License
-
 MIT License
