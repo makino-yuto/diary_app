@@ -23,6 +23,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
@@ -2516,8 +2517,12 @@ private fun CalendarScreen(
                         pageSpacing = 0.dp,
                         flingBehavior = PagerDefaults.flingBehavior(
                             state = pagerState,
-                            snapPositionalThreshold = 0.8f,
-                            pagerSnapDistance = PagerSnapDistance.atMost(1)
+                            pagerSnapDistance = PagerSnapDistance.atMost(1),
+                            snapAnimationSpec = tween(
+                                durationMillis = 280,
+                                easing = FastOutSlowInEasing
+                            ),
+                            snapPositionalThreshold = 0.7f
                         )
                     ) { page ->
                         val pageMonth = uiState.visibleMonth.plusMonths((page - 1).toLong())
