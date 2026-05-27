@@ -9,7 +9,7 @@ Google ログインなしでも使えます。<br>
 画像/動画の複数端末間同期は試行錯誤しています。
 
 ## リリース
-- [最新 APK v1.0.0](https://github.com/makino-yuto/diary_app/releases/download/v1.0.0-debug/mainichi-diary-v1.0.0-debug.apk)
+- [v0.1.0]
 
 ## 主な機能
 - 日記作成
