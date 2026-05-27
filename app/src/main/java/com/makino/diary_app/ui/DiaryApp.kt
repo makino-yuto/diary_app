@@ -1057,7 +1057,17 @@ fun DiaryApp(
         }
         syncSignedInGoogleAccount(account, action = pendingGoogleDriveAction, interactive = true)
     }
-    fun runGoogleDriveAction(action: GoogleDriveAction, interactive: Boolean) {
+    fun launchGoogleDriveSignIn(action: GoogleDriveAction, blockUi: Boolean) {
+        pendingGoogleDriveAction = action
+        isDriveRequestInFlight = true
+        isDriveSyncInFlight = blockUi
+        googleDriveSignInLauncher.launch(googleSignInClient.signInIntent)
+    }
+    fun runGoogleDriveAction(
+        action: GoogleDriveAction,
+        interactive: Boolean,
+        forceAccountPicker: Boolean = false
+    ) {
         if (isDriveRequestInFlight) return
         if (!googleDriveAuthorizationAvailable) {
             if (interactive) {
@@ -1066,17 +1076,23 @@ fun DiaryApp(
             return
         }
         val existingAccount = GoogleSignIn.getLastSignedInAccount(context)
-        if (existingAccount != null) {
+        if (existingAccount != null && !forceAccountPicker) {
             syncSignedInGoogleAccount(existingAccount, action = action, interactive = interactive)
             return
         }
         if (!interactive) {
             return
         }
-        pendingGoogleDriveAction = action
-        isDriveRequestInFlight = true
-        isDriveSyncInFlight = true
-        googleDriveSignInLauncher.launch(googleSignInClient.signInIntent)
+        val shouldBlockUi = interactive || action == GoogleDriveAction.RestoreFromDrive
+        if (forceAccountPicker && existingAccount != null) {
+            isDriveRequestInFlight = true
+            isDriveSyncInFlight = shouldBlockUi
+            googleSignInClient.signOut().addOnCompleteListener {
+                launchGoogleDriveSignIn(action, shouldBlockUi)
+            }
+            return
+        }
+        launchGoogleDriveSignIn(action, shouldBlockUi)
     }
     fun maybeRunAutoDiarySync() {
         if (uiState.googleDriveSyncMode != GoogleDriveSyncMode.AutoOnSave) return
@@ -1196,6 +1212,13 @@ fun DiaryApp(
                         runGoogleDriveAction(
                             action = GoogleDriveAction.RestoreFromDrive,
                             interactive = true
+                        )
+                    },
+                    onChangeGoogleDriveAccount = {
+                        runGoogleDriveAction(
+                            action = GoogleDriveAction.RestoreFromDrive,
+                            interactive = true,
+                            forceAccountPicker = true
                         )
                     },
                     onManualGoogleDriveSync = {
@@ -1492,6 +1515,7 @@ private fun DiaryNavigation(
     onSavePasswordCredential: (String) -> Unit,
     onVerifyPassword: (String) -> Boolean,
     onConnectGoogleDrive: () -> Unit,
+    onChangeGoogleDriveAccount: () -> Unit,
     onManualGoogleDriveSync: () -> Unit,
     onAutoSyncDiarySave: () -> Unit,
     onDisconnectGoogleDrive: () -> Unit,
@@ -1697,6 +1721,7 @@ private fun DiaryNavigation(
                 onSavePasswordCredential = onSavePasswordCredential,
                 onVerifyPassword = onVerifyPassword,
                 onConnectGoogleDrive = onConnectGoogleDrive,
+                onChangeGoogleDriveAccount = onChangeGoogleDriveAccount,
                 onManualGoogleDriveSync = onManualGoogleDriveSync,
                 onDisconnectGoogleDrive = onDisconnectGoogleDrive,
                 onClearAllData = onClearAllData,
@@ -3314,6 +3339,7 @@ private fun SettingsScreen(
     onSavePasswordCredential: (String) -> Unit,
     onVerifyPassword: (String) -> Boolean,
     onConnectGoogleDrive: () -> Unit,
+    onChangeGoogleDriveAccount: () -> Unit,
     onManualGoogleDriveSync: () -> Unit,
     onDisconnectGoogleDrive: () -> Unit,
     onClearAllData: () -> Unit,
@@ -3486,10 +3512,10 @@ private fun SettingsScreen(
                 title = LABEL_SETTINGS_SECTION_BACKUP
             ) {
                 SettingsActionRow(
-                    title = LABEL_GOOGLE_ACCOUNT,
-                    leadingIcon = Icons.Outlined.AccountCircle,
+                    title = LABEL_BACKUP,
+                    leadingIcon = Icons.Outlined.CloudUpload,
                     trailingText = backupAccountEmail ?: if (isGoogleDriveLinked) LABEL_CONNECTED else LABEL_UNSET,
-                    onClick = onConnectGoogleDrive
+                    onClick = onChangeGoogleDriveAccount
                 )
                 HorizontalDivider(color = colorScheme.exactBorderColor(0.08f))
                 SettingsActionRow(
