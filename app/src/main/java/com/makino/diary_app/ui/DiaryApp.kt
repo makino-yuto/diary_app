@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.widget.NumberPicker
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.PickVisualMediaRequest
@@ -2557,7 +2558,7 @@ private fun CalendarMonthPickerDialog(
     onSelectMonth: (YearMonth) -> Unit
 ) {
     var selectedYear by rememberSaveable(visibleMonth) { mutableStateOf(visibleMonth.year) }
-    val months = remember { (1..12).toList() }
+    var selectedMonth by rememberSaveable(visibleMonth) { mutableStateOf(visibleMonth.monthValue) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2573,65 +2574,88 @@ private fun CalendarMonthPickerDialog(
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    TextButton(onClick = { selectedYear -= 1 }) { Text("\u524d\u306e\u5e74") }
-                    Text(
-                        text = "$selectedYear\u5e74",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontFamily = JetBrainsMsGothicFontFamily
-                        )
+                    CalendarMonthNumberPicker(
+                        modifier = Modifier.weight(1f),
+                        value = selectedYear,
+                        range = 1900..2100,
+                        label = "年",
+                        formatter = { "$it" },
+                        onValueChange = { selectedYear = it }
                     )
-                    TextButton(onClick = { selectedYear += 1 }) { Text("\u6b21\u306e\u5e74") }
-                }
-                months.chunked(4).forEach { monthRow ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        monthRow.forEach { month ->
-                            val isSelected =
-                                selectedYear == visibleMonth.year && month == visibleMonth.monthValue
-                            FilledTonalButton(
-                                onClick = { onSelectMonth(YearMonth.of(selectedYear, month)) },
-                                modifier = Modifier.weight(1f),
-                                shape = ControlShape,
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = if (isSelected) {
-                                        if (MaterialTheme.colorScheme.isPureMonochromeTheme()) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                                        }
-                                    } else {
-                                        MaterialTheme.colorScheme.surface
-                                    },
-                                    contentColor = if (isSelected) {
-                                        if (MaterialTheme.colorScheme.isPureMonochromeTheme()) {
-                                            MaterialTheme.colorScheme.background
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        }
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                            ) {
-                                Text("$month\u6708")
-                            }
-                        }
-                    }
+                    CalendarMonthNumberPicker(
+                        modifier = Modifier.weight(1f),
+                        value = selectedMonth,
+                        range = 1..12,
+                        label = "月",
+                        formatter = { "$it" },
+                        onValueChange = { selectedMonth = it }
+                    )
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            TextButton(
+                onClick = { onSelectMonth(YearMonth.of(selectedYear, selectedMonth)) }
+            ) {
+                Text("決定")
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("\u9589\u3058\u308b")
             }
         }
     )
+}
+
+@Composable
+private fun CalendarMonthNumberPicker(
+    modifier: Modifier = Modifier,
+    value: Int,
+    range: IntRange,
+    label: String,
+    formatter: (Int) -> String,
+    onValueChange: (Int) -> Unit
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontFamily = JetBrainsMsGothicFontFamily
+            ),
+            color = MaterialTheme.colorScheme.secondaryTextColor(0.74f)
+        )
+        AndroidView(
+            modifier = Modifier.fillMaxWidth(),
+            factory = { context ->
+                NumberPicker(context).apply {
+                    minValue = range.first
+                    maxValue = range.last
+                    wrapSelectorWheel = false
+                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                    setFormatter { formatter(it) }
+                    setOnValueChangedListener { _, _, newVal -> onValueChange(newVal) }
+                    this.value = value.coerceIn(range.first, range.last)
+                }
+            },
+            update = { picker ->
+                picker.minValue = range.first
+                picker.maxValue = range.last
+                picker.setFormatter { formatter(it) }
+                val coerced = value.coerceIn(range.first, range.last)
+                if (picker.value != coerced) {
+                    picker.value = coerced
+                }
+            }
+        )
+    }
 }
 
 @Composable
