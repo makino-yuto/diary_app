@@ -111,7 +111,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -126,6 +125,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -2383,20 +2383,31 @@ private fun CalendarScreen(
     onOpenDate: (LocalDate) -> Unit,
     onEditDate: (LocalDate) -> Unit
 ) {
-    val days = remember(uiState.visibleMonth) { calendarDays(uiState.visibleMonth) }
     val colorScheme = MaterialTheme.colorScheme
     val isMonochrome = colorScheme.isPureMonochromeTheme()
     val calendarShellColor = colorScheme.calendarShellColor()
     val calendarShellContentColor = colorScheme.calendarShellContentColor()
     var selectedDate by rememberSaveable(uiState.visibleMonth) { mutableStateOf<LocalDate?>(null) }
     var isMonthPickerVisible by rememberSaveable { mutableStateOf(false) }
-    var horizontalDragTotal by remember(uiState.visibleMonth) { mutableStateOf(0f) }
-    var swipeVisualOffsetPx by remember(uiState.visibleMonth) { mutableStateOf(0f) }
-    val animatedSwipeVisualOffsetPx by animateFloatAsState(
-        targetValue = swipeVisualOffsetPx,
-        label = "calendarSwipeVisualOffset"
+    val pagerState = rememberPagerState(
+        initialPage = 1,
+        pageCount = { 3 }
     )
-    val selectedEntry = selectedDate?.let(uiState::entryFor)
+
+    LaunchedEffect(uiState.visibleMonth) {
+        if (pagerState.currentPage != 1) {
+            pagerState.scrollToPage(1)
+        }
+    }
+
+    LaunchedEffect(pagerState, uiState.visibleMonth) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            when (page) {
+                0 -> onSelectMonth(uiState.visibleMonth.minusMonths(1))
+                2 -> onSelectMonth(uiState.visibleMonth.plusMonths(1))
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -2438,27 +2449,7 @@ private fun CalendarScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Card(
-                modifier = Modifier.pointerInput(uiState.visibleMonth) {
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { _, dragAmount ->
-                            horizontalDragTotal += dragAmount
-                            swipeVisualOffsetPx = (swipeVisualOffsetPx + dragAmount * 0.55f)
-                                .coerceIn(-180f, 180f)
-                        },
-                        onDragEnd = {
-                            when {
-                                horizontalDragTotal <= -56f -> onSelectMonth(uiState.visibleMonth.plusMonths(1))
-                                horizontalDragTotal >= 56f -> onSelectMonth(uiState.visibleMonth.minusMonths(1))
-                            }
-                            horizontalDragTotal = 0f
-                            swipeVisualOffsetPx = 0f
-                        },
-                        onDragCancel = {
-                            horizontalDragTotal = 0f
-                            swipeVisualOffsetPx = 0f
-                        }
-                    )
-                },
+                modifier = Modifier,
                 shape = ScreenShape,
                 colors = CardDefaults.cardColors(containerColor = calendarShellColor),
                 border = BorderStroke(1.dp, colorScheme.exactBorderColor())
@@ -2504,75 +2495,90 @@ private fun CalendarScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Column(
-                        modifier = Modifier.graphicsLayer {
-                            translationX = animatedSwipeVisualOffsetPx
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        beyondViewportPageCount = 1,
+                        pageSpacing = 0.dp
+                    ) { page ->
+                        val pageMonth = uiState.visibleMonth.plusMonths((page - 1).toLong())
+                        val pageDays = remember(pageMonth) { calendarDays(pageMonth) }
+                        val pageSelectedDate = selectedDate?.takeIf {
+                            YearMonth.from(it) == pageMonth
                         }
-                    ) {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            listOf(
-                                "\u6708",
-                                "\u706b",
-                                "\u6c34",
-                                "\u6728",
-                                "\u91d1",
-                                "\u571f",
-                                "\u65e5"
-                            ).forEach { label ->
-                                Text(
-                                    text = label,
-                                    modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = calendarShellContentColor
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        days.chunked(7).forEach { week ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        val pageSelectedEntry = pageSelectedDate?.let(uiState::entryFor)
+
+                        Column {
+                            val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                            val swipeAlpha = (1f - (kotlin.math.abs(pageOffset) * 0.18f)).coerceIn(0.82f, 1f)
+                            Column(
+                                modifier = Modifier.graphicsLayer {
+                                    alpha = swipeAlpha
+                                }
                             ) {
-                                week.forEach { day ->
-                                    DayCell(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .aspectRatio(1f),
-                                        date = day,
-                                        hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
-                                        isSelected = day != null && day == selectedDate,
-                                        isToday = day == LocalDate.now(),
-                                        onClick = {
-                                            if (day != null) {
-                                                if (selectedDate == day) {
-                                                    onOpenDate(day)
-                                                } else {
-                                                    selectedDate = day
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    listOf(
+                                        "\u6708",
+                                        "\u706b",
+                                        "\u6c34",
+                                        "\u6728",
+                                        "\u91d1",
+                                        "\u571f",
+                                        "\u65e5"
+                                    ).forEach { label ->
+                                        Text(
+                                            text = label,
+                                            modifier = Modifier.weight(1f),
+                                            textAlign = TextAlign.Center,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = calendarShellContentColor
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                pageDays.chunked(7).forEach { week ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        week.forEach { day ->
+                                            DayCell(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .aspectRatio(1f),
+                                                date = day,
+                                                hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
+                                                isSelected = day != null && day == pageSelectedDate,
+                                                isToday = day == LocalDate.now(),
+                                                onClick = {
+                                                    if (day != null) {
+                                                        if (page != 1) {
+                                                            onSelectMonth(YearMonth.from(day))
+                                                            selectedDate = day
+                                                        } else if (selectedDate == day) {
+                                                            onOpenDate(day)
+                                                        } else {
+                                                            selectedDate = day
+                                                        }
+                                                    }
                                                 }
-                                            }
+                                            )
                                         }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
+
+                                if (pageSelectedDate != null) {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    CalendarSelectedEntryCard(
+                                        date = pageSelectedDate,
+                                        entry = pageSelectedEntry,
+                                        onClick = { onOpenDate(pageSelectedDate) }
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
-                }
-            }
-
-            selectedDate?.let { date ->
-                Spacer(modifier = Modifier.height(14.dp))
-                Box(
-                    modifier = Modifier.graphicsLayer {
-                        translationX = animatedSwipeVisualOffsetPx
-                    }
-                ) {
-                    CalendarSelectedEntryCard(
-                        date = date,
-                        entry = selectedEntry,
-                        onClick = { onOpenDate(date) }
-                    )
                 }
             }
         }
