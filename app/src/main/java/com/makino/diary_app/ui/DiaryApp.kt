@@ -111,6 +111,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -285,8 +286,6 @@ private const val LABEL_ADD_TIME = "\u8ffd\u52a0"
 private const val LABEL_REMOVE = "\u524a\u9664"
 private const val LABEL_SELECTED = "\u9078\u629e\u4e2d"
 private const val LABEL_CONNECTED = "\u30ed\u30b0\u30a4\u30f3\u6e08\u307f"
-private const val LABEL_PREVIOUS_MONTH = "\u524d\u6708"
-private const val LABEL_NEXT_MONTH = "\u6b21\u6708"
 private const val LABEL_PICK_MEDIA = "\u5199\u771f\u3084\u52d5\u753b\u3092\u9078\u629e"
 private const val LABEL_ADD_MEDIA = "\u5199\u771f\u3084\u52d5\u753b\u3092\u8ffd\u52a0"
 private const val LABEL_NO_PHOTO = "\u306a\u3044"
@@ -1651,8 +1650,6 @@ private fun DiaryNavigation(
         composable(ROUTE_CALENDAR) {
             CalendarScreen(
                 uiState = uiState,
-                onPreviousMonth = { onUpdateMonth(uiState.visibleMonth.minusMonths(1)) },
-                onNextMonth = { onUpdateMonth(uiState.visibleMonth.plusMonths(1)) },
                 onSelectMonth = onUpdateMonth,
                 onOpenDiaryMenu = openDiaryMenu,
                 onOpenCalendar = openCalendar,
@@ -2379,8 +2376,6 @@ private fun AnimatedChatContent(
 @Composable
 private fun CalendarScreen(
     uiState: DiaryUiState,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
     onSelectMonth: (YearMonth) -> Unit,
     onOpenDiaryMenu: () -> Unit,
     onOpenCalendar: () -> Unit,
@@ -2396,6 +2391,11 @@ private fun CalendarScreen(
     var selectedDate by rememberSaveable(uiState.visibleMonth) { mutableStateOf<LocalDate?>(null) }
     var isMonthPickerVisible by rememberSaveable { mutableStateOf(false) }
     var horizontalDragTotal by remember(uiState.visibleMonth) { mutableStateOf(0f) }
+    var swipeVisualOffsetPx by remember(uiState.visibleMonth) { mutableStateOf(0f) }
+    val animatedSwipeVisualOffsetPx by animateFloatAsState(
+        targetValue = swipeVisualOffsetPx,
+        label = "calendarSwipeVisualOffset"
+    )
     val selectedEntry = selectedDate?.let(uiState::entryFor)
 
     Scaffold(
@@ -2442,16 +2442,20 @@ private fun CalendarScreen(
                     detectHorizontalDragGestures(
                         onHorizontalDrag = { _, dragAmount ->
                             horizontalDragTotal += dragAmount
+                            swipeVisualOffsetPx = (swipeVisualOffsetPx + dragAmount * 0.55f)
+                                .coerceIn(-180f, 180f)
                         },
                         onDragEnd = {
                             when {
-                                horizontalDragTotal <= -56f -> onNextMonth()
-                                horizontalDragTotal >= 56f -> onPreviousMonth()
+                                horizontalDragTotal <= -56f -> onSelectMonth(uiState.visibleMonth.plusMonths(1))
+                                horizontalDragTotal >= 56f -> onSelectMonth(uiState.visibleMonth.minusMonths(1))
                             }
                             horizontalDragTotal = 0f
+                            swipeVisualOffsetPx = 0f
                         },
                         onDragCancel = {
                             horizontalDragTotal = 0f
+                            swipeVisualOffsetPx = 0f
                         }
                     )
                 },
@@ -2460,15 +2464,10 @@ private fun CalendarScreen(
                 border = BorderStroke(1.dp, colorScheme.exactBorderColor())
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
+                    Box(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        contentAlignment = Alignment.Center
                     ) {
-                        TextButton(
-                            onClick = onPreviousMonth,
-                            colors = ButtonDefaults.textButtonColors(contentColor = calendarShellContentColor)
-                        ) { Text(LABEL_PREVIOUS_MONTH) }
                         Row(
                             modifier = Modifier
                                 .clip(ControlShape)
@@ -2503,70 +2502,78 @@ private fun CalendarScreen(
                                 color = if (isMonochrome) colorScheme.onBackground else colorScheme.primary
                             )
                         }
-                        TextButton(
-                            onClick = onNextMonth,
-                            colors = ButtonDefaults.textButtonColors(contentColor = calendarShellContentColor)
-                        ) { Text(LABEL_NEXT_MONTH) }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        listOf(
-                            "\u6708",
-                            "\u706b",
-                            "\u6c34",
-                            "\u6728",
-                            "\u91d1",
-                            "\u571f",
-                            "\u65e5"
-                        ).forEach { label ->
-                            Text(
-                                text = label,
-                                modifier = Modifier.weight(1f),
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = calendarShellContentColor
-                            )
+                    Column(
+                        modifier = Modifier.graphicsLayer {
+                            translationX = animatedSwipeVisualOffsetPx
                         }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    days.chunked(7).forEach { week ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            week.forEach { day ->
-                                DayCell(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .aspectRatio(1f),
-                                    date = day,
-                                    hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
-                                    isSelected = day != null && day == selectedDate,
-                                    isToday = day == LocalDate.now(),
-                                    onClick = {
-                                        if (day != null) {
-                                            if (selectedDate == day) {
-                                                onOpenDate(day)
-                                            } else {
-                                                selectedDate = day
-                                            }
-                                        }
-                                    }
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            listOf(
+                                "\u6708",
+                                "\u706b",
+                                "\u6c34",
+                                "\u6728",
+                                "\u91d1",
+                                "\u571f",
+                                "\u65e5"
+                            ).forEach { label ->
+                                Text(
+                                    text = label,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = calendarShellContentColor
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        days.chunked(7).forEach { week ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                week.forEach { day ->
+                                    DayCell(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(1f),
+                                        date = day,
+                                        hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
+                                        isSelected = day != null && day == selectedDate,
+                                        isToday = day == LocalDate.now(),
+                                        onClick = {
+                                            if (day != null) {
+                                                if (selectedDate == day) {
+                                                    onOpenDate(day)
+                                                } else {
+                                                    selectedDate = day
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                     }
                 }
             }
 
             selectedDate?.let { date ->
                 Spacer(modifier = Modifier.height(14.dp))
-                CalendarSelectedEntryCard(
-                    date = date,
-                    entry = selectedEntry,
-                    onClick = { onOpenDate(date) }
-                )
+                Box(
+                    modifier = Modifier.graphicsLayer {
+                        translationX = animatedSwipeVisualOffsetPx
+                    }
+                ) {
+                    CalendarSelectedEntryCard(
+                        date = date,
+                        entry = selectedEntry,
+                        onClick = { onOpenDate(date) }
+                    )
+                }
             }
         }
 
