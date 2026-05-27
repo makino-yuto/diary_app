@@ -2516,6 +2516,7 @@ private fun CalendarScreen(
                         pageSpacing = 0.dp,
                         flingBehavior = PagerDefaults.flingBehavior(
                             state = pagerState,
+                            snapPositionalThreshold = 0.8f,
                             pagerSnapDistance = PagerSnapDistance.atMost(1)
                         )
                     ) { page ->
