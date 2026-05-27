@@ -1,7 +1,10 @@
 package com.makino.diary_app.data
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import com.makino.diary_app.model.AppThemePreset
 import com.makino.diary_app.model.GoogleDriveSyncMode
 import com.makino.diary_app.ui.theme.DEFAULT_THEME_INTENSITY
@@ -15,6 +18,7 @@ import java.util.Base64
 
 class DiaryRepository(context: Context) {
     private val appContext = context.applicationContext
+    private val contentResolver = appContext.contentResolver
     private val prefs = appContext.getSharedPreferences("diary_prefs", Context.MODE_PRIVATE)
 
     fun loadEntries(): List<DiaryEntry> {
@@ -26,6 +30,9 @@ class DiaryRepository(context: Context) {
             }
         }.sortedByDescending { it.date }
     }
+
+    fun hasStoredLocalMediaReferences(): Boolean =
+        loadEntries().any { entry -> entry.mediaItems.isNotEmpty() }
 
     fun loadThemePreset(): AppThemePreset =
         AppThemePreset.fromStorageValue(prefs.getString(KEY_THEME_PRESET, null))
@@ -217,10 +224,10 @@ class DiaryRepository(context: Context) {
         val entriesArray = JSONArray()
         loadEntries()
             .sortedBy { it.date }
-            .forEach { entry -> entriesArray.put(entry.toJson()) }
+            .forEach { entry -> entriesArray.put(ensureMediaItems(entry).toJson()) }
 
         return JSONObject()
-            .put("version", 2)
+            .put("version", 3)
             .put("entries", entriesArray)
             .put("diaryUpdatedAtMillis", loadDiaryUpdatedAtMillis())
             .put("exportedAtMillis", System.currentTimeMillis())
@@ -299,12 +306,17 @@ class DiaryRepository(context: Context) {
         markPhotoStepCompleted: Boolean = true
     ): DiaryEntry {
         val current = ensureDraft(date)
+        val currentWithMedia = ensureMediaItems(current)
+        val newMediaItems = photoUris.map(::buildMediaItem)
+        val mergedMediaItems = (currentWithMedia.mediaItems + newMediaItems)
+            .distinctBy(DiaryMediaItem::stableKey)
         val updated = current.copy(
-            photoUris = (current.photoUris + photoUris.map(Uri::toString)).distinct(),
-            photoStepCompleted = if (current.userText.isBlank()) {
+            photoUris = mergedMediaItems.mapNotNull { resolveMediaUri(it) ?: it.originalUri },
+            mediaItems = mergedMediaItems,
+            photoStepCompleted = if (currentWithMedia.userText.isBlank()) {
                 false
             } else {
-                current.photoStepCompleted || markPhotoStepCompleted
+                currentWithMedia.photoStepCompleted || markPhotoStepCompleted
             },
             updatedAtMillis = System.currentTimeMillis()
         )
@@ -324,8 +336,14 @@ class DiaryRepository(context: Context) {
 
     fun removePhoto(date: LocalDate, photoUri: String): DiaryEntry {
         val current = ensureDraft(date)
+        val removeIndex = current.photoUris.indexOfFirst { it == photoUri }
         val updated = current.copy(
             photoUris = current.photoUris.filterNot { it == photoUri },
+            mediaItems = if (removeIndex in current.mediaItems.indices) {
+                current.mediaItems.filterIndexed { index, _ -> index != removeIndex }
+            } else {
+                current.mediaItems.filterNot { it.originalUri == photoUri || resolveMediaUri(it) == photoUri }
+            },
             updatedAtMillis = System.currentTimeMillis()
         )
         saveEntry(updated)
@@ -336,6 +354,7 @@ class DiaryRepository(context: Context) {
         val current = ensureDraft(date)
         val updated = current.copy(
             photoUris = emptyList(),
+            mediaItems = emptyList(),
             photoStepCompleted = true,
             updatedAtMillis = System.currentTimeMillis()
         )
@@ -372,20 +391,33 @@ class DiaryRepository(context: Context) {
         .put("photoStepCompleted", photoStepCompleted)
         .put("updatedAtMillis", updatedAtMillis)
         .put("photoUris", JSONArray(photoUris))
+        .put("mediaItems", JSONArray(mediaItems.map { it.toJson() }))
 
     private fun JSONObject.toDiaryEntry(): DiaryEntry {
         val userText = optString("userText").trim()
+        val legacyPhotoUris = optJSONArray("photoUris")?.let { array ->
+            buildList {
+                for (index in 0 until array.length()) {
+                    add(array.getString(index))
+                }
+            }
+        } ?: emptyList()
+        val mediaItems = optJSONArray("mediaItems")?.let { array ->
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    add(item.toDiaryMediaItem())
+                }
+            }
+        }?.takeIf { it.isNotEmpty() }
+            ?: legacyPhotoUris.map { uri -> buildMediaItem(Uri.parse(uri)) }
+        val resolvedPhotoUris = mediaItems.mapNotNull { resolveMediaUri(it) ?: it.originalUri?.takeIf(::canAccessUri) }
         return DiaryEntry(
             date = LocalDate.parse(getString("date")),
             prompt = getString("prompt"),
             userText = userText,
-            photoUris = optJSONArray("photoUris")?.let { array ->
-                buildList {
-                    for (index in 0 until array.length()) {
-                        add(array.getString(index))
-                    }
-                }
-            } ?: emptyList(),
+            photoUris = resolvedPhotoUris,
+            mediaItems = mediaItems,
             photoStepCompleted = if (userText.isBlank()) {
                 false
             } else {
@@ -393,6 +425,148 @@ class DiaryRepository(context: Context) {
             },
             updatedAtMillis = optLong("updatedAtMillis", System.currentTimeMillis())
         )
+    }
+
+    private fun ensureMediaItems(entry: DiaryEntry): DiaryEntry {
+        if (entry.photoUris.isEmpty()) return entry.copy(mediaItems = emptyList())
+        if (entry.mediaItems.size == entry.photoUris.size && entry.mediaItems.isNotEmpty()) {
+            return entry.copy(
+                photoUris = entry.mediaItems.mapNotNull { resolveMediaUri(it) ?: it.originalUri?.takeIf(::canAccessUri) }
+            )
+        }
+        val rebuiltItems = entry.photoUris.map { uriString -> buildMediaItem(Uri.parse(uriString)) }
+        return entry.copy(
+            photoUris = rebuiltItems.mapNotNull { resolveMediaUri(it) ?: it.originalUri?.takeIf(::canAccessUri) },
+            mediaItems = rebuiltItems
+        )
+    }
+
+    private fun DiaryMediaItem.toJson(): JSONObject = JSONObject()
+        .put("originalUri", originalUri)
+        .put("mediaStoreId", mediaStoreId)
+        .put("volumeName", volumeName)
+        .put("displayName", displayName)
+        .put("relativePath", relativePath)
+        .put("mimeType", mimeType)
+        .put("sizeBytes", sizeBytes)
+        .put("dateAddedSeconds", dateAddedSeconds)
+
+    private fun JSONObject.toDiaryMediaItem(): DiaryMediaItem = DiaryMediaItem(
+        originalUri = optString("originalUri").takeIf { it.isNotBlank() },
+        mediaStoreId = optLong("mediaStoreId").takeIf { has("mediaStoreId") && it > 0L },
+        volumeName = optString("volumeName").takeIf { it.isNotBlank() },
+        displayName = optString("displayName").takeIf { it.isNotBlank() },
+        relativePath = optString("relativePath").takeIf { it.isNotBlank() },
+        mimeType = optString("mimeType").takeIf { it.isNotBlank() },
+        sizeBytes = optLong("sizeBytes").takeIf { has("sizeBytes") && it >= 0L },
+        dateAddedSeconds = optLong("dateAddedSeconds").takeIf { has("dateAddedSeconds") && it >= 0L }
+    )
+
+    private fun buildMediaItem(uri: Uri): DiaryMediaItem {
+        val projection = mutableListOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_ADDED
+        ).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(MediaStore.MediaColumns.RELATIVE_PATH)
+                add(MediaStore.MediaColumns.VOLUME_NAME)
+            }
+        }.toTypedArray()
+
+        return runCatching {
+            contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                DiaryMediaItem(
+                    originalUri = uri.toString(),
+                    mediaStoreId = cursor.longOrNull(MediaStore.MediaColumns._ID),
+                    volumeName = cursor.stringOrNull(MediaStore.MediaColumns.VOLUME_NAME),
+                    displayName = cursor.stringOrNull(MediaStore.MediaColumns.DISPLAY_NAME),
+                    relativePath = cursor.stringOrNull(MediaStore.MediaColumns.RELATIVE_PATH),
+                    mimeType = cursor.stringOrNull(MediaStore.MediaColumns.MIME_TYPE),
+                    sizeBytes = cursor.longOrNull(MediaStore.MediaColumns.SIZE),
+                    dateAddedSeconds = cursor.longOrNull(MediaStore.MediaColumns.DATE_ADDED)
+                )
+            }
+        }.getOrNull() ?: DiaryMediaItem(originalUri = uri.toString())
+    }
+
+    private fun resolveMediaUri(item: DiaryMediaItem): String? {
+        val directlyAccessible = item.originalUri?.takeIf(::canAccessUri)
+        if (directlyAccessible != null) return directlyAccessible
+
+        val byId = item.mediaStoreId?.let { mediaStoreId ->
+            findMediaStoreUri(
+                item = item,
+                selection = "${MediaStore.MediaColumns._ID} = ?",
+                selectionArgs = arrayOf(mediaStoreId.toString())
+            )
+        }
+        if (byId != null) return byId
+
+        if (item.displayName.isNullOrBlank()) return null
+        val clauses = mutableListOf("${MediaStore.MediaColumns.DISPLAY_NAME} = ?")
+        val args = mutableListOf(item.displayName)
+        if (!item.relativePath.isNullOrBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            clauses += "${MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+            args += item.relativePath
+        }
+        if (!item.mimeType.isNullOrBlank()) {
+            clauses += "${MediaStore.MediaColumns.MIME_TYPE} = ?"
+            args += item.mimeType
+        }
+        if (item.sizeBytes != null && item.sizeBytes >= 0L) {
+            clauses += "${MediaStore.MediaColumns.SIZE} = ?"
+            args += item.sizeBytes.toString()
+        }
+        return findMediaStoreUri(
+            item = item,
+            selection = clauses.joinToString(" AND "),
+            selectionArgs = args.toTypedArray()
+        )
+    }
+
+    private fun findMediaStoreUri(
+        item: DiaryMediaItem,
+        selection: String,
+        selectionArgs: Array<String>
+    ): String? {
+        val collection = MediaStore.Files.getContentUri(
+            item.volumeName?.takeIf { it.isNotBlank() } ?: DEFAULT_MEDIA_VOLUME
+        )
+        return runCatching {
+            contentResolver.query(
+                collection,
+                arrayOf(MediaStore.MediaColumns._ID),
+                selection,
+                selectionArgs,
+                "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))
+                ContentUris.withAppendedId(collection, id).toString()
+            }
+        }.getOrNull()
+    }
+
+    private fun canAccessUri(uriString: String): Boolean {
+        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return false
+        return runCatching {
+            contentResolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), null, null, null)
+                ?.use { it.moveToFirst() } == true
+        }.getOrDefault(false)
+    }
+
+    private fun android.database.Cursor.stringOrNull(column: String): String? {
+        val index = getColumnIndex(column)
+        return if (index >= 0 && !isNull(index)) getString(index) else null
+    }
+
+    private fun android.database.Cursor.longOrNull(column: String): Long? {
+        val index = getColumnIndex(column)
+        return if (index >= 0 && !isNull(index)) getLong(index) else null
     }
 
     private fun extractEntriesArrayFromLegacyBackup(root: JSONObject): JSONArray? {
@@ -416,6 +590,7 @@ class DiaryRepository(context: Context) {
         }.maxOrNull() ?: 0L
 
     private companion object {
+        const val DEFAULT_MEDIA_VOLUME = "external"
         const val FIXED_PROMPT = "\u4eca\u65e5\u306f\u3069\u3093\u306a\u4e00\u65e5\u3067\u3057\u305f\u304b\uff1f"
         const val KEY_ENTRIES = "entries"
         const val KEY_THEME_PRESET = "theme_preset"

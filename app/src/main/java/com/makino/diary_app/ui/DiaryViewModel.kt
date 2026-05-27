@@ -163,6 +163,9 @@ class DiaryViewModel(application: Application) : AndroidViewModel(application) {
         refresh()
     }
 
+    fun hasStoredLocalMediaReferences(): Boolean =
+        repository.hasStoredLocalMediaReferences()
+
     fun setFingerprintAuthEnabled(enabled: Boolean) {
         repository.saveFingerprintAuthEnabled(enabled)
         _uiState.update {

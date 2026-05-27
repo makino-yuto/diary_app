@@ -864,6 +864,11 @@ fun DiaryApp(
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { }
+    val mediaReadPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        viewModel.refresh()
+    }
     fun showCompactDriveStatus(text: String, autoHideMillis: Long? = null) {
         compactDriveStatus = text
         compactDriveStatusToken += 1
@@ -884,6 +889,28 @@ fun DiaryApp(
         pendingGoogleDriveAction = GoogleDriveAction.RestoreFromDrive
         isDriveRequestInFlight = false
         isDriveSyncInFlight = false
+    }
+    fun requiredMediaReadPermissions(): Array<String> =
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO
+            )
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            else -> emptyArray()
+        }
+    fun hasMediaReadPermission(): Boolean =
+        requiredMediaReadPermissions().all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    fun requestMediaReadPermissionsIfNeeded() {
+        if (!viewModel.hasStoredLocalMediaReferences()) return
+        val permissions = requiredMediaReadPermissions()
+        if (permissions.isEmpty() || hasMediaReadPermission()) {
+            viewModel.refresh()
+            return
+        }
+        mediaReadPermissionLauncher.launch(permissions)
     }
     fun syncSignedInGoogleAccount(
         account: GoogleSignInAccount,
@@ -969,6 +996,9 @@ fun DiaryApp(
             )
             if (interactive) {
                 backupStatusMessage = syncMessage
+            }
+            if (syncResult.isSuccess && action == GoogleDriveAction.RestoreFromDrive) {
+                requestMediaReadPermissionsIfNeeded()
             }
             if (shouldShowCompactStatus) {
                 if (syncResult.isSuccess) {
