@@ -2393,6 +2393,7 @@ private fun CalendarScreen(
     val calendarShellContentColor = colorScheme.calendarShellContentColor()
     var selectedDate by rememberSaveable(uiState.visibleMonth) { mutableStateOf<LocalDate?>(null) }
     var isMonthPickerVisible by rememberSaveable { mutableStateOf(false) }
+    var isRecenteringPager by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(
         initialPage = 1,
         pageCount = { 3 }
@@ -2402,10 +2403,13 @@ private fun CalendarScreen(
         if (pagerState.currentPage != 1) {
             pagerState.scrollToPage(1)
         }
+        isRecenteringPager = false
     }
 
     LaunchedEffect(pagerState, uiState.visibleMonth) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
+            if (page == 1 || isRecenteringPager) return@collect
+            isRecenteringPager = true
             when (page) {
                 0 -> onSelectMonth(uiState.visibleMonth.minusMonths(1))
                 2 -> onSelectMonth(uiState.visibleMonth.plusMonths(1))
@@ -2502,6 +2506,7 @@ private fun CalendarScreen(
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxWidth(),
+                        userScrollEnabled = !isRecenteringPager,
                         beyondViewportPageCount = 1,
                         pageSpacing = 0.dp,
                         flingBehavior = PagerDefaults.flingBehavior(
@@ -2528,63 +2533,67 @@ private fun CalendarScreen(
                                     val cellSize = (maxWidth - (CALENDAR_DAY_SPACING * 6)) / 7
                                     val calendarGridHeight = (cellSize * 6) + (CALENDAR_DAY_SPACING * 5)
 
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(CALENDAR_WEEKDAY_HEIGHT)
-                                    ) {
-                                        listOf(
-                                            "\u6708",
-                                            "\u706b",
-                                            "\u6c34",
-                                            "\u6728",
-                                            "\u91d1",
-                                            "\u571f",
-                                            "\u65e5"
-                                        ).forEach { label ->
-                                            Text(
-                                                text = label,
-                                                modifier = Modifier
-                                                    .width(cellSize)
-                                                    .align(Alignment.CenterVertically),
-                                                textAlign = TextAlign.Center,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = calendarShellContentColor
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(10.dp))
                                     Column(
-                                        modifier = Modifier.height(calendarGridHeight),
-                                        verticalArrangement = Arrangement.spacedBy(CALENDAR_DAY_SPACING)
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        pageDays.chunked(7).take(6).forEach { week ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(CALENDAR_DAY_SPACING)
-                                            ) {
-                                                week.forEach { day ->
-                                                    DayCell(
-                                                        modifier = Modifier
-                                                            .width(cellSize)
-                                                            .height(cellSize),
-                                                        date = day,
-                                                        hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
-                                                        isSelected = day != null && day == pageSelectedDate,
-                                                        isToday = day == LocalDate.now(),
-                                                        onClick = {
-                                                            if (day != null) {
-                                                                if (page != 1) {
-                                                                    onSelectMonth(YearMonth.from(day))
-                                                                    selectedDate = day
-                                                                } else if (selectedDate == day) {
-                                                                    onOpenDate(day)
-                                                                } else {
-                                                                    selectedDate = day
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(CALENDAR_WEEKDAY_HEIGHT)
+                                        ) {
+                                            listOf(
+                                                "\u6708",
+                                                "\u706b",
+                                                "\u6c34",
+                                                "\u6728",
+                                                "\u91d1",
+                                                "\u571f",
+                                                "\u65e5"
+                                            ).forEach { label ->
+                                                Text(
+                                                    text = label,
+                                                    modifier = Modifier
+                                                        .width(cellSize)
+                                                        .align(Alignment.CenterVertically),
+                                                    textAlign = TextAlign.Center,
+                                                    style = MaterialTheme.typography.labelLarge,
+                                                    color = calendarShellContentColor
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Column(
+                                            modifier = Modifier.height(calendarGridHeight),
+                                            verticalArrangement = Arrangement.spacedBy(CALENDAR_DAY_SPACING)
+                                        ) {
+                                            pageDays.chunked(7).take(6).forEach { week ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(CALENDAR_DAY_SPACING)
+                                                ) {
+                                                    week.forEach { day ->
+                                                        DayCell(
+                                                            modifier = Modifier
+                                                                .width(cellSize)
+                                                                .height(cellSize),
+                                                            date = day,
+                                                            hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
+                                                            isSelected = day != null && day == pageSelectedDate,
+                                                            isToday = day == LocalDate.now(),
+                                                            onClick = {
+                                                                if (day != null) {
+                                                                    if (page != 1) {
+                                                                        onSelectMonth(YearMonth.from(day))
+                                                                        selectedDate = day
+                                                                    } else if (selectedDate == day) {
+                                                                        onOpenDate(day)
+                                                                    } else {
+                                                                        selectedDate = day
+                                                                    }
                                                                 }
                                                             }
-                                                        }
-                                                    )
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
