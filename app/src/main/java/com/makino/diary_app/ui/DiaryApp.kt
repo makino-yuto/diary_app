@@ -30,6 +30,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -4593,12 +4595,6 @@ private fun DiaryScreen(
     var isEditing by rememberSaveable(date, startInEditMode) { mutableStateOf(startInEditMode) }
     var editText by rememberSaveable(entry?.date, entry?.userText) { mutableStateOf(entry?.userText.orEmpty()) }
 
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val diaryLift by animateDpAsState(
-        targetValue = if (isEditing) (imeBottom - navigationBottom).coerceAtLeast(0.dp) else 0.dp,
-        label = "diaryLift"
-    )
     var horizontalDragTotal by remember(date, isEditing) { mutableStateOf(0f) }
 
     val photoPicker = rememberLauncherForActivityResult(
@@ -4639,7 +4635,7 @@ private fun DiaryScreen(
                 .padding(innerPadding)
                 .statusBarsPadding()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .offset(y = -diaryLift)
+                .imePadding()
                 .pointerInput(date, isEditing) {
                     if (isEditing) return@pointerInput
                     detectHorizontalDragGestures(
@@ -4778,6 +4774,8 @@ private fun LinedTextSection(
     val textStyle = MaterialTheme.typography.bodyLarge.copy(color = colorScheme.onSurface)
     val lineHeight = with(density) { textStyle.lineHeight.toDp() }
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    var hasFocus by remember { mutableStateOf(false) }
     val isDarkTheme = colorScheme.background.luminance() < 0.5f
     val lineColor = if (colorScheme.isPureMonochromeTheme()) {
         colorScheme.onSurface
@@ -4785,6 +4783,12 @@ private fun LinedTextSection(
         colorScheme.onSurface.copy(alpha = 0.18f)
     } else {
         colorScheme.primary.copy(alpha = 0.22f)
+    }
+
+    LaunchedEffect(isEditing, hasFocus) {
+        if (!isEditing || !hasFocus) return@LaunchedEffect
+        delay(120)
+        bringIntoViewRequester.bringIntoView()
     }
 
     Box(
@@ -4822,7 +4826,9 @@ private fun LinedTextSection(
             onValueChange = onTextChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = lineHeight),
+                .heightIn(min = lineHeight)
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .onFocusChanged { hasFocus = it.isFocused },
             textStyle = textStyle,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
             readOnly = !isEditing,
