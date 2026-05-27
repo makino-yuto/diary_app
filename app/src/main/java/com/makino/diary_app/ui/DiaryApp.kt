@@ -2362,6 +2362,7 @@ private fun CalendarScreen(
     val calendarShellContentColor = colorScheme.calendarShellContentColor()
     var selectedDate by rememberSaveable(uiState.visibleMonth) { mutableStateOf<LocalDate?>(null) }
     var isMonthPickerVisible by rememberSaveable { mutableStateOf(false) }
+    var horizontalDragTotal by remember(uiState.visibleMonth) { mutableStateOf(0f) }
     val selectedEntry = selectedDate?.let(uiState::entryFor)
 
     Scaffold(
@@ -2404,6 +2405,23 @@ private fun CalendarScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Card(
+                modifier = Modifier.pointerInput(uiState.visibleMonth) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { _, dragAmount ->
+                            horizontalDragTotal += dragAmount
+                        },
+                        onDragEnd = {
+                            when {
+                                horizontalDragTotal <= -56f -> onNextMonth()
+                                horizontalDragTotal >= 56f -> onPreviousMonth()
+                            }
+                            horizontalDragTotal = 0f
+                        },
+                        onDragCancel = {
+                            horizontalDragTotal = 0f
+                        }
+                    )
+                },
                 shape = ScreenShape,
                 colors = CardDefaults.cardColors(containerColor = calendarShellColor),
                 border = BorderStroke(1.dp, colorScheme.exactBorderColor())
