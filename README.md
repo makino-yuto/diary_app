@@ -5,7 +5,8 @@
 
 
 Google ログインなしでも使えます。<br>
-必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。
+必要な場合だけ Google Drive と連携して、複数端末間で日記データを同期できます。<br>
+画像/動画の複数端末間同期は試行錯誤しています。
 
 ## リリース
 - [最新 APK v1.0.0](https://github.com/makino-yuto/diary_app/releases/download/v1.0.0-debug/mainichi-diary-v1.0.0-debug.apk)
