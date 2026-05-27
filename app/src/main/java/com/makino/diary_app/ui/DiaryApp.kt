@@ -4567,7 +4567,7 @@ private fun DiaryScreen(
                 .padding(innerPadding)
                 .statusBarsPadding()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(bottom = diaryLift)
+                .offset(y = -diaryLift)
                 .pointerInput(date, isEditing) {
                     if (isEditing) return@pointerInput
                     detectHorizontalDragGestures(
