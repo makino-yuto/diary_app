@@ -29,6 +29,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -234,6 +236,8 @@ private const val ROUTE_CHAT = "chat"
 private const val ROUTE_DIARY_PREFIX = "diary"
 private const val ARG_EDIT = "edit"
 private val DIARY_LINE_HEIGHT = 36.dp
+private val CALENDAR_WEEKDAY_HEIGHT = 28.dp
+private val CALENDAR_DAY_SPACING = 8.dp
 private val ScreenShape = RoundedCornerShape(30.dp)
 private val PanelShape = RoundedCornerShape(22.dp)
 private val ControlShape = RoundedCornerShape(18.dp)
@@ -2499,7 +2503,11 @@ private fun CalendarScreen(
                         state = pagerState,
                         modifier = Modifier.fillMaxWidth(),
                         beyondViewportPageCount = 1,
-                        pageSpacing = 0.dp
+                        pageSpacing = 0.dp,
+                        flingBehavior = PagerDefaults.flingBehavior(
+                            state = pagerState,
+                            pagerSnapDistance = PagerSnapDistance.atMost(1)
+                        )
                     ) { page ->
                         val pageMonth = uiState.visibleMonth.plusMonths((page - 1).toLong())
                         val pageDays = remember(pageMonth) { calendarDays(pageMonth) }
@@ -2516,56 +2524,71 @@ private fun CalendarScreen(
                                     alpha = swipeAlpha
                                 }
                             ) {
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf(
-                                        "\u6708",
-                                        "\u706b",
-                                        "\u6c34",
-                                        "\u6728",
-                                        "\u91d1",
-                                        "\u571f",
-                                        "\u65e5"
-                                    ).forEach { label ->
-                                        Text(
-                                            text = label,
-                                            modifier = Modifier.weight(1f),
-                                            textAlign = TextAlign.Center,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = calendarShellContentColor
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(10.dp))
-                                pageDays.chunked(7).forEach { week ->
+                                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                    val cellSize = (maxWidth - (CALENDAR_DAY_SPACING * 6)) / 7
+                                    val calendarGridHeight = (cellSize * 6) + (CALENDAR_DAY_SPACING * 5)
+
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(CALENDAR_WEEKDAY_HEIGHT)
                                     ) {
-                                        week.forEach { day ->
-                                            DayCell(
+                                        listOf(
+                                            "\u6708",
+                                            "\u706b",
+                                            "\u6c34",
+                                            "\u6728",
+                                            "\u91d1",
+                                            "\u571f",
+                                            "\u65e5"
+                                        ).forEach { label ->
+                                            Text(
+                                                text = label,
                                                 modifier = Modifier
-                                                    .weight(1f)
-                                                    .aspectRatio(1f),
-                                                date = day,
-                                                hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
-                                                isSelected = day != null && day == pageSelectedDate,
-                                                isToday = day == LocalDate.now(),
-                                                onClick = {
-                                                    if (day != null) {
-                                                        if (page != 1) {
-                                                            onSelectMonth(YearMonth.from(day))
-                                                            selectedDate = day
-                                                        } else if (selectedDate == day) {
-                                                            onOpenDate(day)
-                                                        } else {
-                                                            selectedDate = day
-                                                        }
-                                                    }
-                                                }
+                                                    .width(cellSize)
+                                                    .align(Alignment.CenterVertically),
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = calendarShellContentColor
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Column(
+                                        modifier = Modifier.height(calendarGridHeight),
+                                        verticalArrangement = Arrangement.spacedBy(CALENDAR_DAY_SPACING)
+                                    ) {
+                                        pageDays.chunked(7).take(6).forEach { week ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(CALENDAR_DAY_SPACING)
+                                            ) {
+                                                week.forEach { day ->
+                                                    DayCell(
+                                                        modifier = Modifier
+                                                            .width(cellSize)
+                                                            .height(cellSize),
+                                                        date = day,
+                                                        hasEntry = day != null && uiState.entryFor(day)?.isCompleted == true,
+                                                        isSelected = day != null && day == pageSelectedDate,
+                                                        isToday = day == LocalDate.now(),
+                                                        onClick = {
+                                                            if (day != null) {
+                                                                if (page != 1) {
+                                                                    onSelectMonth(YearMonth.from(day))
+                                                                    selectedDate = day
+                                                                } else if (selectedDate == day) {
+                                                                    onOpenDate(day)
+                                                                } else {
+                                                                    selectedDate = day
+                                                                }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
 
                                 if (pageSelectedDate != null) {
@@ -5269,6 +5292,9 @@ private fun calendarDays(month: YearMonth): List<LocalDate?> {
         days += month.atDay(day)
     }
     while (days.size % 7 != 0) {
+        days += null
+    }
+    while (days.size < 42) {
         days += null
     }
     return days
