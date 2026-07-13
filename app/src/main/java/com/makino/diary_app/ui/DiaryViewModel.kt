@@ -31,6 +31,7 @@ data class DiaryUiState(
     val themeIntensity: Float = DEFAULT_THEME_INTENSITY,
     val reminderTimes: List<LocalTime> = emptyList(),
     val notificationsEnabled: Boolean = true,
+    val chatEnabled: Boolean = true,
     val fingerprintAuthEnabled: Boolean = false,
     val passwordAuthEnabled: Boolean = false,
     val hasPasswordCredential: Boolean = false,
@@ -82,6 +83,7 @@ class DiaryViewModel(application: Application) : AndroidViewModel(application) {
                 themeIntensity = repository.loadThemeIntensity(),
                 reminderTimes = repository.loadReminderTimes(),
                 notificationsEnabled = repository.isNotificationsEnabled(),
+                chatEnabled = repository.isChatEnabled(),
                 fingerprintAuthEnabled = fingerprintAuthEnabled,
                 passwordAuthEnabled = passwordAuthEnabled,
                 hasPasswordCredential = hasPasswordCredential,
@@ -146,6 +148,11 @@ class DiaryViewModel(application: Application) : AndroidViewModel(application) {
             if (enabled) repository.loadReminderTimes() else emptyList()
         )
         _uiState.update { it.copy(notificationsEnabled = enabled) }
+    }
+
+    fun setChatEnabled(enabled: Boolean) {
+        repository.saveChatEnabled(enabled)
+        _uiState.update { it.copy(chatEnabled = enabled) }
     }
 
     fun saveBackupAccountLabel(label: String?) {

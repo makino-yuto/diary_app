@@ -99,6 +99,16 @@ class DiaryRepository(context: Context) {
             .apply()
     }
 
+    fun isChatEnabled(): Boolean =
+        prefs.getBoolean(KEY_CHAT_ENABLED, true)
+
+    fun saveChatEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean(KEY_CHAT_ENABLED, enabled)
+            .putLong(KEY_DATA_UPDATED_AT_MILLIS, System.currentTimeMillis())
+            .apply()
+    }
+
     fun isFingerprintAuthEnabled(): Boolean =
         prefs.getBoolean(KEY_FINGERPRINT_AUTH_ENABLED, false)
 
@@ -608,6 +618,7 @@ class DiaryRepository(context: Context) {
         const val KEY_REMINDER_PROMPT_SHOWN = "reminder_prompt_shown"
         const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
+        const val KEY_CHAT_ENABLED = "chat_enabled"
         const val KEY_FINGERPRINT_AUTH_ENABLED = "fingerprint_auth_enabled"
         const val KEY_PASSWORD_AUTH_ENABLED = "password_auth_enabled"
         const val KEY_PASSWORD_HASH = "password_hash"

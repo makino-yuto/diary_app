@@ -84,6 +84,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -251,6 +252,7 @@ private const val LABEL_DIARY_MENU_TITLE = "\u65e5\u8a18"
 private const val LABEL_CALENDAR_TAB = "\u30ab\u30ec\u30f3\u30c0\u30fc"
 private const val LABEL_SETTINGS = "\u8a2d\u5b9a"
 private const val LABEL_SETTINGS_TITLE = "\u8a2d\u5b9a"
+private const val LABEL_SETTINGS_SECTION_DIARY = "\u65e5\u8a18"
 private const val LABEL_SETTINGS_SECTION_NOTIFICATION_THEME = "\u901a\u77e5/\u30c6\u30fc\u30de"
 private const val LABEL_SETTINGS_SECTION_IMPORTANT = "\u91cd\u8981"
 private const val LABEL_SETTINGS_SECTION_SECURITY = "\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3"
@@ -258,6 +260,7 @@ private const val LABEL_SETTINGS_SECTION_BACKUP = "\u30d0\u30c3\u30af\u30a2\u30c
 private const val LABEL_THEME = "\u30c6\u30fc\u30de"
 private const val LABEL_NOTIFICATION_TIME = "\u901a\u77e5\u6642\u523b"
 private const val LABEL_NOTIFICATION_TOGGLE = "\u901a\u77e5\u306eON/OFF"
+private const val LABEL_CHAT_TOGGLE = "\u30c1\u30e3\u30c3\u30c8\u6a5f\u80fd"
 private const val LABEL_DELETE_ALL_DATA = "\u5168\u30c7\u30fc\u30bf\u3092\u524a\u9664\u3059\u308b"
 private const val LABEL_TERMS_OF_USE = "\u5229\u7528\u898f\u7d04"
 private const val LABEL_PRIVACY_POLICY = "\u30d7\u30e9\u30a4\u30d0\u30b7\u30fc\u30dd\u30ea\u30b7\u30fc"
@@ -1203,6 +1206,7 @@ fun DiaryApp(
                     onSetThemePreset = viewModel::setThemePreset,
                     onSetThemeIntensity = viewModel::setThemeIntensity,
                     onSetNotificationsEnabled = viewModel::setNotificationsEnabled,
+                    onSetChatEnabled = viewModel::setChatEnabled,
                     onSetGoogleDriveSyncMode = viewModel::setGoogleDriveSyncMode,
                     onSetFingerprintAuthEnabled = viewModel::setFingerprintAuthEnabled,
                     onSetPasswordAuthEnabled = viewModel::setPasswordAuthEnabled,
@@ -1509,6 +1513,7 @@ private fun DiaryNavigation(
     onSetThemePreset: (AppThemePreset) -> Unit,
     onSetThemeIntensity: (Float) -> Unit,
     onSetNotificationsEnabled: (Boolean) -> Unit,
+    onSetChatEnabled: (Boolean) -> Unit,
     onSetGoogleDriveSyncMode: (GoogleDriveSyncMode) -> Unit,
     onSetFingerprintAuthEnabled: (Boolean) -> Unit,
     onSetPasswordAuthEnabled: (Boolean) -> Unit,
@@ -1570,13 +1575,15 @@ private fun DiaryNavigation(
     }
     val finishOnboarding = {
         onCompleteOnboarding()
-        val target = if (uiState.hasCompletedEntry(today)) {
-            ROUTE_CALENDAR
-        } else {
-            if (uiState.entryFor(today) == null) {
-                onEnsureTodayDraft()
+        val target = when {
+            uiState.hasCompletedEntry(today) -> ROUTE_CALENDAR
+            uiState.chatEnabled -> {
+                if (uiState.entryFor(today) == null) {
+                    onEnsureTodayDraft()
+                }
+                ROUTE_CHAT
             }
-            ROUTE_CHAT
+            else -> ROUTE_DIARY_MENU
         }
         navController.navigate(target) {
             popUpTo(ROUTE_ONBOARDING) { inclusive = true }
@@ -1588,6 +1595,7 @@ private fun DiaryNavigation(
         uiState.isLoading,
         uiState.entries,
         uiState.hasCompletedOnboarding,
+        uiState.chatEnabled,
         forceShowOnboarding
     ) {
         if (uiState.isLoading) return@LaunchedEffect
@@ -1602,6 +1610,14 @@ private fun DiaryNavigation(
         if (launchRouteResolved) return@LaunchedEffect
         if (!uiState.hasCompletedOnboarding) {
             navController.navigate(ROUTE_ONBOARDING) {
+                popUpTo(ROUTE_SPLASH) { inclusive = true }
+                launchSingleTop = true
+            }
+            launchRouteResolved = true
+            return@LaunchedEffect
+        }
+        if (!uiState.chatEnabled) {
+            navController.navigate(ROUTE_DIARY_MENU) {
                 popUpTo(ROUTE_SPLASH) { inclusive = true }
                 launchSingleTop = true
             }
@@ -1706,6 +1722,7 @@ private fun DiaryNavigation(
                 themePreset = uiState.themePreset,
                 reminderTimes = uiState.reminderTimes,
                 notificationsEnabled = uiState.notificationsEnabled,
+                chatEnabled = uiState.chatEnabled,
                 fingerprintAuthEnabled = uiState.fingerprintAuthEnabled,
                 passwordAuthEnabled = uiState.passwordAuthEnabled,
                 hasPasswordCredential = uiState.hasPasswordCredential,
@@ -1715,6 +1732,7 @@ private fun DiaryNavigation(
                 onOpenThemeSelection = openThemePicker,
                 onOpenReminderSettings = openReminderSettings,
                 onSetNotificationsEnabled = onSetNotificationsEnabled,
+                onSetChatEnabled = onSetChatEnabled,
                 onSetGoogleDriveSyncMode = onSetGoogleDriveSyncMode,
                 onSetFingerprintAuthEnabled = onSetFingerprintAuthEnabled,
                 onSetPasswordAuthEnabled = onSetPasswordAuthEnabled,
@@ -3324,6 +3342,7 @@ private fun SettingsScreen(
     themePreset: AppThemePreset,
     reminderTimes: List<LocalTime>,
     notificationsEnabled: Boolean,
+    chatEnabled: Boolean,
     fingerprintAuthEnabled: Boolean,
     passwordAuthEnabled: Boolean,
     hasPasswordCredential: Boolean,
@@ -3333,6 +3352,7 @@ private fun SettingsScreen(
     onOpenThemeSelection: () -> Unit,
     onOpenReminderSettings: () -> Unit,
     onSetNotificationsEnabled: (Boolean) -> Unit,
+    onSetChatEnabled: (Boolean) -> Unit,
     onSetGoogleDriveSyncMode: (GoogleDriveSyncMode) -> Unit,
     onSetFingerprintAuthEnabled: (Boolean) -> Unit,
     onSetPasswordAuthEnabled: (Boolean) -> Unit,
@@ -3428,6 +3448,17 @@ private fun SettingsScreen(
                     fontFamily = JetBrainsMsGothicFontFamily
                 )
             )
+
+            SettingsSection(
+                title = LABEL_SETTINGS_SECTION_DIARY
+            ) {
+                SettingsSwitchRow(
+                    title = LABEL_CHAT_TOGGLE,
+                    leadingIcon = Icons.Outlined.ChatBubbleOutline,
+                    checked = chatEnabled,
+                    onCheckedChange = onSetChatEnabled
+                )
+            }
 
             SettingsSection(
                 title = LABEL_SETTINGS_SECTION_NOTIFICATION_THEME
